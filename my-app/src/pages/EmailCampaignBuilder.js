@@ -58,6 +58,8 @@ import {
 import EmailFlowDesigner from '../components/EmailCampaignBuilder/EmailFlowDesigner';
 import EmailTemplateEditor from '../components/EmailCampaignBuilder/EmailTemplateEditor';
 import ABTestingPanel from '../components/EmailCampaignBuilder/ABTestingPanel';
+import AutomationControlPanel from '../components/EmailCampaignBuilder/AutomationControlPanel';
+import SubscriberJourneyViewer from '../components/EmailCampaignBuilder/SubscriberJourneyViewer';
 
 const EmailCampaignBuilder = () => {
   const { id } = useParams();
@@ -69,6 +71,7 @@ const EmailCampaignBuilder = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [flowData, setFlowData] = useState({ nodes: [], edges: [] });
+  const [campaignStatus, setCampaignStatus] = useState('draft');
 
   useEffect(() => {
     fetchCampaign();
@@ -91,6 +94,7 @@ const EmailCampaignBuilder = () => {
       } else {
         const response = await axios.get(`/api/campaigns/${id}`);
         setCampaign(response.data.campaign);
+        setCampaignStatus(response.data.campaign.status);
       }
     } catch (error) {
       console.error('Error fetching campaign:', error);
@@ -162,6 +166,11 @@ const EmailCampaignBuilder = () => {
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
+  };
+
+  const handleStatusChange = (newStatus) => {
+    setCampaignStatus(newStatus);
+    setCampaign(prev => prev ? { ...prev, status: newStatus } : null);
   };
 
   if (isLoading) {
@@ -243,6 +252,7 @@ const EmailCampaignBuilder = () => {
             <Tab label="Flow Designer" />
             <Tab label="Template Editor" />
             <Tab label="A/B Testing" />
+            <Tab label="Automation" />
             <Tab label="Subscribers" />
             <Tab label="Analytics" />
           </Tabs>
@@ -300,10 +310,17 @@ const EmailCampaignBuilder = () => {
           )}
           
           {activeTab === 3 && (
-            <SubscribersPanel campaign={campaign} />
+            <AutomationControlPanel 
+              campaign={campaign} 
+              onStatusChange={handleStatusChange}
+            />
           )}
           
           {activeTab === 4 && (
+            <SubscriberJourneyViewer campaign={campaign} />
+          )}
+          
+          {activeTab === 5 && (
             <AnalyticsPanel campaign={campaign} />
           )}
         </Box>

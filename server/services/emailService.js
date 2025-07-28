@@ -32,10 +32,10 @@ class EmailService {
 
   async sendCampaignEmail(campaign, subscriber, step) {
     try {
-      // Replace variables in email content
-      const subject = this.replaceVariables(step.emailTemplate.subject, subscriber);
-      const htmlBody = this.replaceVariables(step.emailTemplate.htmlBody, subscriber);
-      const textBody = this.replaceVariables(step.emailTemplate.body, subscriber);
+      // Replace variables in email content with tracking
+      const subject = this.replaceVariables(step.emailTemplate.subject, subscriber, campaign._id);
+      const htmlBody = this.replaceVariables(step.emailTemplate.htmlBody, subscriber, campaign._id);
+      const textBody = this.replaceVariables(step.emailTemplate.body, subscriber, campaign._id);
 
       const result = await this.sendEmail(
         subscriber.email,
@@ -51,16 +51,38 @@ class EmailService {
     }
   }
 
-  replaceVariables(content, subscriber) {
+  replaceVariables(content, subscriber, campaignId = null) {
     if (!content) return '';
 
-    return content
+    let processedContent = content
       .replace(/\{\{user\.name\}\}/g, subscriber.firstName || 'User')
       .replace(/\{\{user\.email\}\}/g, subscriber.email)
       .replace(/\{\{user\.company\}\}/g, subscriber.customFields?.company || '')
-      .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
-      .replace(/\{\{unsubscribe\.url\}\}/g, `${process.env.CLIENT_URL}/unsubscribe?email=${subscriber.email}`)
-      .replace(/\{\{tracking\.url\}\}/g, `${process.env.CLIENT_URL}/track?email=${subscriber.email}`);
+      .replace(/\{\{date\}\}/g, new Date().toLocaleDateString());
+
+    // Add tracking URLs if campaign ID is provided
+    if (campaignId) {
+      const baseUrl = process.env.CLIENT_URL || 'http://localhost:5000';
+      const trackingPixel = `<img src="${baseUrl}/api/tracking/pixel/${campaignId}/${encodeURIComponent(subscriber.email)}" width="1" height="1" style="display:none;" />`;
+      const unsubscribeUrl = `${baseUrl}/api/tracking/unsubscribe/${campaignId}/${encodeURIComponent(subscriber.email)}`;
+      
+      processedContent = processedContent
+        .replace(/\{\{unsubscribe\.url\}\}/g, unsubscribeUrl)
+        .replace(/\{\{tracking\.pixel\}\}/g, trackingPixel);
+      
+      // Add tracking pixel to HTML content
+      if (processedContent.includes('</body>')) {
+        processedContent = processedContent.replace('</body>', `${trackingPixel}</body>`);
+      } else {
+        processedContent += trackingPixel;
+      }
+    } else {
+      processedContent = processedContent
+        .replace(/\{\{unsubscribe\.url\}\}/g, `${process.env.CLIENT_URL}/unsubscribe?email=${subscriber.email}`)
+        .replace(/\{\{tracking\.url\}\}/g, `${process.env.CLIENT_URL}/track?email=${subscriber.email}`);
+    }
+
+    return processedContent;
   }
 
   async sendTestEmail(to, campaign, step) {

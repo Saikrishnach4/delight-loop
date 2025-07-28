@@ -40,6 +40,7 @@ app.use('/api/dashboards', require('./routes/dashboards'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/widgets', require('./routes/widgets'));
 app.use('/api/collaboration', require('./routes/collaboration'));
+app.use('/api/tracking', require('./routes/tracking'));
 
 // Socket.IO for real-time collaboration
 require('./socket/collaboration')(io);

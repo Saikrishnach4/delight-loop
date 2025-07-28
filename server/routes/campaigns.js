@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const EmailCampaign = require('../models/EmailCampaign');
 const { auth } = require('../middleware/auth');
 const emailService = require('../services/emailService');
+const emailAutomationService = require('../services/emailAutomationService');
 
 const router = express.Router();
 
@@ -359,6 +360,183 @@ router.post('/:id/trigger', auth, async (req, res) => {
   } catch (error) {
     console.error('Trigger campaign error:', error);
     res.status(500).json({ error: 'Failed to trigger campaign step.' });
+  }
+});
+
+// Start campaign automation
+router.post('/:id/start-automation', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findOne({
+      _id: req.params.id,
+      owner: req.user._id,
+      isActive: true
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    // Update campaign status to active
+    campaign.status = 'active';
+    await campaign.save();
+
+    // Start automation
+    const result = await emailAutomationService.startCampaignAutomation(campaign._id);
+
+    if (result.success) {
+      res.json({
+        message: 'Campaign automation started successfully',
+        automationStatus: emailAutomationService.getAutomationStatus(campaign._id)
+      });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    console.error('Start automation error:', error);
+    res.status(500).json({ error: 'Failed to start automation.' });
+  }
+});
+
+// Stop campaign automation
+router.post('/:id/stop-automation', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findOne({
+      _id: req.params.id,
+      owner: req.user._id,
+      isActive: true
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    // Update campaign status to paused
+    campaign.status = 'paused';
+    await campaign.save();
+
+    // Stop automation
+    const result = await emailAutomationService.stopCampaignAutomation(campaign._id);
+
+    if (result.success) {
+      res.json({
+        message: 'Campaign automation stopped successfully',
+        automationStatus: emailAutomationService.getAutomationStatus(campaign._id)
+      });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    console.error('Stop automation error:', error);
+    res.status(500).json({ error: 'Failed to stop automation.' });
+  }
+});
+
+// Get automation status
+router.get('/:id/automation-status', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findOne({
+      _id: req.params.id,
+      owner: req.user._id,
+      isActive: true
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    const automationStatus = emailAutomationService.getAutomationStatus(campaign._id);
+
+    res.json({
+      automationStatus,
+      campaignStatus: campaign.status,
+      totalSubscribers: campaign.subscribers.length,
+      activeSubscribers: campaign.subscribers.filter(s => s.status === 'active').length
+    });
+  } catch (error) {
+    console.error('Get automation status error:', error);
+    res.status(500).json({ error: 'Failed to get automation status.' });
+  }
+});
+
+// Handle subscriber behavior event (for tracking opens, clicks, etc.)
+router.post('/:id/subscriber-event', async (req, res) => {
+  try {
+    const { subscriberEmail, eventType } = req.body;
+
+    if (!subscriberEmail || !eventType) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+
+    // Find campaign by subscriber email
+    const campaign = await EmailCampaign.findOne({
+      'subscribers.email': subscriberEmail,
+      isActive: true
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    // Handle the event
+    await emailAutomationService.handleSubscriberEvent(
+      campaign._id,
+      subscriberEmail,
+      eventType
+    );
+
+    res.json({
+      message: 'Event handled successfully',
+      eventType,
+      subscriberEmail
+    });
+  } catch (error) {
+    console.error('Handle subscriber event error:', error);
+    res.status(500).json({ error: 'Failed to handle event.' });
+  }
+});
+
+// Get subscriber journey
+router.get('/:id/subscriber/:email/journey', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findOne({
+      _id: req.params.id,
+      owner: req.user._id,
+      isActive: true
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    const subscriber = campaign.subscribers.find(s => s.email === req.params.email);
+    if (!subscriber) {
+      return res.status(404).json({ error: 'Subscriber not found.' });
+    }
+
+    const journey = {
+      subscriber: {
+        email: subscriber.email,
+        firstName: subscriber.firstName,
+        lastName: subscriber.lastName,
+        status: subscriber.status,
+        subscribedAt: subscriber.subscribedAt,
+        currentStep: subscriber.currentStep
+      },
+      behavior: subscriber.behavior,
+      stepHistory: subscriber.stepHistory.map(history => ({
+        stepNumber: history.stepNumber,
+        sentAt: history.sentAt,
+        openedAt: history.openedAt,
+        clickedAt: history.clickedAt,
+        status: history.status
+      })),
+      nextStep: campaign.steps.find(step => step.stepNumber === subscriber.currentStep)
+    };
+
+    res.json({ journey });
+  } catch (error) {
+    console.error('Get subscriber journey error:', error);
+    res.status(500).json({ error: 'Failed to get subscriber journey.' });
   }
 });
 
