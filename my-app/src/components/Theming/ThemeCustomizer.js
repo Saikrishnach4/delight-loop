@@ -33,6 +33,11 @@ import { ChromePicker } from 'react-color';
 
 const getDefaultTheme = () => ({
   name: 'Default Theme',
+  primary: '#1976d2',
+  secondary: '#dc004e',
+  background: '#ffffff',
+  text: '#000000',
+  border: '#e0e0e0',
   colors: {
     primary: '#1976d2',
     secondary: '#dc004e',
@@ -72,13 +77,17 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
   }, [currentTheme]);
 
   const handleColorChange = (color) => {
-    setTheme(prev => ({
-      ...prev,
+    const newTheme = {
+      ...theme,
       colors: {
-        ...prev.colors,
+        ...theme.colors,
         [activeColorField]: color.hex,
       },
-    }));
+      // Also update the main theme properties for backward compatibility
+      [activeColorField]: color.hex,
+    };
+    setTheme(newTheme);
+    onThemeChange(newTheme);
   };
 
   const openColorPicker = (field) => {
@@ -87,28 +96,24 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
   };
 
   const handleThemeChange = (field, value) => {
-    setTheme(prev => ({
-      ...prev,
+    const newTheme = {
+      ...theme,
       [field]: value,
-    }));
-    onThemeChange({ ...theme, [field]: value });
+    };
+    setTheme(newTheme);
+    onThemeChange(newTheme);
   };
 
   const handleNestedChange = (section, field, value) => {
-    setTheme(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value,
-      },
-    }));
-    onThemeChange({
+    const newTheme = {
       ...theme,
       [section]: {
         ...theme[section],
         [field]: value,
       },
-    });
+    };
+    setTheme(newTheme);
+    onThemeChange(newTheme);
   };
 
   const handleSave = () => {
@@ -326,6 +331,66 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
     </Box>
   );
 
+  const renderLivePreview = () => (
+    <Box>
+      <Typography variant="h6" gutterBottom>
+        Live Preview
+      </Typography>
+      <Box
+        sx={{
+          p: 3,
+          border: `1px solid ${theme.border || '#e0e0e0'}`,
+          borderRadius: theme.spacing?.borderRadius || 4,
+          backgroundColor: theme.background || '#ffffff',
+          color: theme.text || '#000000',
+          fontFamily: theme.typography?.fontFamily || 'Roboto, sans-serif',
+          fontSize: theme.typography?.fontSize || 14,
+          lineHeight: theme.typography?.lineHeight || 1.5,
+          boxShadow: theme.shadows?.enabled ? `0 ${theme.shadows.intensity * 2}px ${theme.shadows.intensity * 4}px rgba(0,0,0,0.1)` : 'none',
+        }}
+      >
+        <Typography variant="h5" gutterBottom sx={{ color: theme.primary || '#1976d2' }}>
+          Sample Dashboard Title
+        </Typography>
+        <Typography variant="body1" paragraph>
+          This is a sample text showing how your theme will look. The colors, typography, and spacing will be applied to your dashboard.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Button 
+            variant="contained" 
+            sx={{ 
+              backgroundColor: theme.primary || '#1976d2',
+              color: '#ffffff'
+            }}
+          >
+            Primary Button
+          </Button>
+          <Button 
+            variant="outlined" 
+            sx={{ 
+              borderColor: theme.secondary || '#dc004e',
+              color: theme.secondary || '#dc004e'
+            }}
+          >
+            Secondary Button
+          </Button>
+        </Box>
+        <Box sx={{ mt: 2, p: 2, backgroundColor: theme.colors?.surface || '#f5f5f5', borderRadius: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            This is a sample card with surface color.
+          </Typography>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  const tabs = [
+    { label: 'General', icon: <PaletteIcon /> },
+    { label: 'Data', icon: <ColorLensIcon /> },
+    { label: 'Style', icon: <PaletteIcon /> },
+    { label: 'Preview', icon: <ColorLensIcon /> },
+  ];
+
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -386,6 +451,12 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           </Grid>
           <Grid item xs={12}>
             {renderEffectsSection()}
+          </Grid>
+          <Grid item xs={12}>
+            <Divider />
+          </Grid>
+          <Grid item xs={12}>
+            {renderLivePreview()}
           </Grid>
         </Grid>
       </Box>

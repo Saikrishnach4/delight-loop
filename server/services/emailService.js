@@ -34,8 +34,15 @@ class EmailService {
     try {
       // Replace variables in email content
       const subject = this.replaceVariables(step.emailTemplate.subject, subscriber);
-      const htmlBody = this.replaceVariables(step.emailTemplate.htmlBody, subscriber);
+      let htmlBody = this.replaceVariables(step.emailTemplate.htmlBody, subscriber);
       const textBody = this.replaceVariables(step.emailTemplate.body, subscriber);
+
+      // Add tracking pixel for email opens
+      const trackingPixel = `<img src="${process.env.CLIENT_URL}/api/campaigns/track/open?email=${subscriber.email}&campaignId=${campaign._id}&stepNumber=${step.stepNumber}" width="1" height="1" style="display:none;" />`;
+      htmlBody += trackingPixel;
+
+      // Wrap links with tracking URLs
+      htmlBody = this.wrapLinksWithTracking(htmlBody, subscriber.email, campaign._id, step.stepNumber);
 
       const result = await this.sendEmail(
         subscriber.email,
@@ -61,6 +68,17 @@ class EmailService {
       .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
       .replace(/\{\{unsubscribe\.url\}\}/g, `${process.env.CLIENT_URL}/unsubscribe?email=${subscriber.email}`)
       .replace(/\{\{tracking\.url\}\}/g, `${process.env.CLIENT_URL}/track?email=${subscriber.email}`);
+  }
+
+  wrapLinksWithTracking(htmlContent, email, campaignId, stepNumber) {
+    // Simple regex to find and wrap links with tracking
+    return htmlContent.replace(
+      /<a\s+href=["']([^"']+)["']([^>]*)>/gi,
+      (match, url, attributes) => {
+        const trackingUrl = `${process.env.CLIENT_URL}/api/campaigns/track/click?email=${email}&campaignId=${campaignId}&stepNumber=${stepNumber}&url=${encodeURIComponent(url)}`;
+        return `<a href="${trackingUrl}"${attributes}>`;
+      }
+    );
   }
 
   async sendTestEmail(to, campaign, step) {

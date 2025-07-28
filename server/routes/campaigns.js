@@ -6,6 +6,95 @@ const emailService = require('../services/emailService');
 
 const router = express.Router();
 
+// Track email open (no auth required - called from emails)
+router.get('/track/open', async (req, res) => {
+  try {
+    const { email, campaignId, stepNumber } = req.query;
+    
+    if (!email || !campaignId) {
+      return res.status(400).json({ error: 'Missing required parameters.' });
+    }
+
+    const campaign = await EmailCampaign.findById(campaignId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    const subscriber = campaign.subscribers.find(s => s.email === email);
+    if (!subscriber) {
+      return res.status(404).json({ error: 'Subscriber not found.' });
+    }
+
+    // Record email open
+    subscriber.behavior.opens.push(new Date());
+    subscriber.lastActivity = new Date();
+
+    // Update step history
+    const stepHistory = subscriber.stepHistory.find(h => h.stepNumber === parseInt(stepNumber));
+    if (stepHistory) {
+      stepHistory.openedAt = new Date();
+      stepHistory.status = 'opened';
+    }
+
+    // Update campaign analytics
+    campaign.analytics.totalOpens += 1;
+    campaign.analytics.openRate = (campaign.analytics.totalOpens / campaign.analytics.totalSent) * 100;
+
+    await campaign.save();
+
+    // Return a 1x1 transparent pixel for email tracking
+    res.set('Content-Type', 'image/png');
+    res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
+  } catch (error) {
+    console.error('Track open error:', error);
+    res.status(500).json({ error: 'Failed to track email open.' });
+  }
+});
+
+// Track email click (no auth required - called from emails)
+router.get('/track/click', async (req, res) => {
+  try {
+    const { email, campaignId, stepNumber, url } = req.query;
+    
+    if (!email || !campaignId || !url) {
+      return res.status(400).json({ error: 'Missing required parameters.' });
+    }
+
+    const campaign = await EmailCampaign.findById(campaignId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    const subscriber = campaign.subscribers.find(s => s.email === email);
+    if (!subscriber) {
+      return res.status(404).json({ error: 'Subscriber not found.' });
+    }
+
+    // Record email click
+    subscriber.behavior.clicks.push(new Date());
+    subscriber.lastActivity = new Date();
+
+    // Update step history
+    const stepHistory = subscriber.stepHistory.find(h => h.stepNumber === parseInt(stepNumber));
+    if (stepHistory) {
+      stepHistory.clickedAt = new Date();
+      stepHistory.status = 'clicked';
+    }
+
+    // Update campaign analytics
+    campaign.analytics.totalClicks += 1;
+    campaign.analytics.clickRate = (campaign.analytics.totalClicks / campaign.analytics.totalOpens) * 100;
+
+    await campaign.save();
+
+    // Redirect to the actual URL
+    res.redirect(url);
+  } catch (error) {
+    console.error('Track click error:', error);
+    res.status(500).json({ error: 'Failed to track email click.' });
+  }
+});
+
 // Get all campaigns for current user
 router.get('/', auth, async (req, res) => {
   try {

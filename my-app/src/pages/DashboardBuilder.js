@@ -9,15 +9,21 @@ import {
   Tooltip,
   Snackbar,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
   Settings as SettingsIcon,
+  Palette as PaletteIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import DashboardCanvas from '../components/DashboardCanvas';
+import ThemeCustomizer from '../components/Theming/ThemeCustomizer';
 import { useDashboard } from '../context/DashboardContext';
 
 const DashboardBuilder = () => {
@@ -26,6 +32,7 @@ const DashboardBuilder = () => {
   const [dashboard, setDashboard] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showThemeCustomizer, setShowThemeCustomizer] = useState(false);
   const { setCurrentDashboard } = useDashboard();
 
   useEffect(() => {
@@ -72,6 +79,12 @@ const DashboardBuilder = () => {
         description: 'Test dashboard for debugging',
         widgets: [],
         layout: [],
+        theme: {
+          primary: '#1976d2',
+          secondary: '#dc004e',
+          background: '#ffffff',
+          text: '#000000'
+        },
         owner: 'test-user',
         isActive: true
       };
@@ -98,6 +111,28 @@ const DashboardBuilder = () => {
     } catch (error) {
       console.error('Auto-save failed:', error);
     }
+  };
+
+  const handleThemeChange = (newTheme) => {
+    const updatedDashboard = {
+      ...dashboard,
+      theme: newTheme
+    };
+    setDashboard(updatedDashboard);
+    
+    // Auto-save theme changes
+    handleUpdateDashboard(updatedDashboard);
+  };
+
+  const handleThemeSave = (savedTheme) => {
+    const updatedDashboard = {
+      ...dashboard,
+      theme: savedTheme
+    };
+    setDashboard(updatedDashboard);
+    handleUpdateDashboard(updatedDashboard);
+    setShowThemeCustomizer(false);
+    toast.success('Theme saved successfully!');
   };
 
   const handleSave = async () => {
@@ -163,6 +198,14 @@ const DashboardBuilder = () => {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tooltip title="Theme Customizer">
+            <IconButton 
+              onClick={() => setShowThemeCustomizer(true)}
+              color="primary"
+            >
+              <PaletteIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Dashboard Settings">
             <IconButton color="primary">
               <SettingsIcon />
@@ -186,6 +229,33 @@ const DashboardBuilder = () => {
           onUpdateDashboard={handleUpdateDashboard}
         />
       </Box>
+
+      {/* Theme Customizer Dialog */}
+      <Dialog
+        open={showThemeCustomizer}
+        onClose={() => setShowThemeCustomizer(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '80vh' }
+        }}
+      >
+        <DialogTitle>
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            <Typography variant="h6">Theme Customizer</Typography>
+            <IconButton onClick={() => setShowThemeCustomizer(false)}>
+              <SettingsIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <ThemeCustomizer
+            currentTheme={dashboard.theme}
+            onThemeChange={handleThemeChange}
+            onSave={handleThemeSave}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Auto-save indicator */}
       <Snackbar

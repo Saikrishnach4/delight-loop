@@ -82,16 +82,14 @@ const dashboardSchema = new mongoose.Schema({
     autoSave: { type: Boolean, default: true },
     refreshInterval: { type: Number, default: 30000 } // 30 seconds
   },
-  version: {
-    type: Number,
-    default: 1
-  },
   isActive: {
     type: Boolean,
     default: true
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  // Disable versioning to prevent conflicts in collaborative editing
+  versionKey: false
 });
 
 // Index for better query performance

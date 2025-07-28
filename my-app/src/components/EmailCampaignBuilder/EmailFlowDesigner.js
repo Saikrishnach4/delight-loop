@@ -427,51 +427,185 @@ const NodeConfiguration = ({ node, onUpdate, onDelete }) => {
         </FormControl>
       </Grid>
       {config.triggerType === 'behavior' && (
-        <Grid item xs={12}>
-          <FormControl fullWidth>
-            <InputLabel>Behavior</InputLabel>
-            <Select
-              value={config.behavior || 'open'}
-              label="Behavior"
-              onChange={(e) => handleConfigChange('behavior', e.target.value)}
-            >
-              <MenuItem value="open">Email Open</MenuItem>
-              <MenuItem value="click">Email Click</MenuItem>
-              <MenuItem value="purchase">Purchase</MenuItem>
-              <MenuItem value="idle">Idle (No Activity)</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
+        <>
+          <Grid item xs={12}>
+            <FormControl fullWidth>
+              <InputLabel>Behavior</InputLabel>
+              <Select
+                value={config.behavior || 'open'}
+                label="Behavior"
+                onChange={(e) => handleConfigChange('behavior', e.target.value)}
+              >
+                <MenuItem value="open">Email Open</MenuItem>
+                <MenuItem value="click">Email Click</MenuItem>
+                <MenuItem value="purchase">Purchase</MenuItem>
+                <MenuItem value="idle">Idle (No Activity)</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Count"
+              value={config.count || 1}
+              onChange={(e) => handleConfigChange('count', parseInt(e.target.value))}
+              helperText="How many times this behavior should occur"
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth>
+              <InputLabel>Time Window</InputLabel>
+              <Select
+                value={config.timeWindow || 'anytime'}
+                label="Time Window"
+                onChange={(e) => handleConfigChange('timeWindow', e.target.value)}
+              >
+                <MenuItem value="anytime">Anytime</MenuItem>
+                <MenuItem value="within_1_hour">Within 1 hour</MenuItem>
+                <MenuItem value="within_24_hours">Within 24 hours</MenuItem>
+                <MenuItem value="within_7_days">Within 7 days</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </>
+      )}
+      {config.triggerType === 'time' && (
+        <>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Delay"
+              value={config.delay || 0}
+              onChange={(e) => handleConfigChange('delay', parseInt(e.target.value))}
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth>
+              <InputLabel>Unit</InputLabel>
+              <Select
+                value={config.unit || 'days'}
+                label="Unit"
+                onChange={(e) => handleConfigChange('unit', e.target.value)}
+              >
+                <MenuItem value="immediate">Immediate</MenuItem>
+                <MenuItem value="minutes">Minutes</MenuItem>
+                <MenuItem value="hours">Hours</MenuItem>
+                <MenuItem value="days">Days</MenuItem>
+                <MenuItem value="weeks">Weeks</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </>
       )}
     </Grid>
   );
 
   const renderConditionConfig = () => (
     <Grid container spacing={2}>
-      <Grid item xs={6}>
-        <TextField
-          fullWidth
-          type="number"
-          label="Value"
-          value={config.value || 0}
-          onChange={(e) => handleConfigChange('value', parseInt(e.target.value))}
-        />
-      </Grid>
-      <Grid item xs={6}>
+      <Grid item xs={12}>
         <FormControl fullWidth>
-          <InputLabel>Unit</InputLabel>
+          <InputLabel>Condition Type</InputLabel>
           <Select
-            value={config.unit || 'days'}
-            label="Unit"
-            onChange={(e) => handleConfigChange('unit', e.target.value)}
+            value={config.conditionType || 'time'}
+            label="Condition Type"
+            onChange={(e) => handleConfigChange('conditionType', e.target.value)}
           >
-            <MenuItem value="minutes">Minutes</MenuItem>
-            <MenuItem value="hours">Hours</MenuItem>
-            <MenuItem value="days">Days</MenuItem>
-            <MenuItem value="weeks">Weeks</MenuItem>
+            <MenuItem value="time">Time-based</MenuItem>
+            <MenuItem value="behavior">Behavior-based</MenuItem>
+            <MenuItem value="custom">Custom Logic</MenuItem>
           </Select>
         </FormControl>
       </Grid>
+      
+      {config.conditionType === 'time' && (
+        <>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Value"
+              value={config.value || 0}
+              onChange={(e) => handleConfigChange('value', parseInt(e.target.value))}
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth>
+              <InputLabel>Unit</InputLabel>
+              <Select
+                value={config.unit || 'days'}
+                label="Unit"
+                onChange={(e) => handleConfigChange('unit', e.target.value)}
+              >
+                <MenuItem value="immediate">Immediate</MenuItem>
+                <MenuItem value="minutes">Minutes</MenuItem>
+                <MenuItem value="hours">Hours</MenuItem>
+                <MenuItem value="days">Days</MenuItem>
+                <MenuItem value="weeks">Weeks</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </>
+      )}
+      
+      {config.conditionType === 'behavior' && (
+        <>
+          <Grid item xs={12}>
+            <FormControl fullWidth>
+              <InputLabel>Behavior</InputLabel>
+              <Select
+                value={config.behavior || 'open'}
+                label="Behavior"
+                onChange={(e) => handleConfigChange('behavior', e.target.value)}
+              >
+                <MenuItem value="open">Email Open</MenuItem>
+                <MenuItem value="click">Email Click</MenuItem>
+                <MenuItem value="purchase">Purchase</MenuItem>
+                <MenuItem value="idle">Idle (No Activity)</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Count"
+              value={config.count || 1}
+              onChange={(e) => handleConfigChange('count', parseInt(e.target.value))}
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth>
+              <InputLabel>Operator</InputLabel>
+              <Select
+                value={config.operator || 'equals'}
+                label="Operator"
+                onChange={(e) => handleConfigChange('operator', e.target.value)}
+              >
+                <MenuItem value="equals">Equals</MenuItem>
+                <MenuItem value="greater_than">Greater than</MenuItem>
+                <MenuItem value="less_than">Less than</MenuItem>
+                <MenuItem value="not_equals">Not equals</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </>
+      )}
+      
+      {config.conditionType === 'custom' && (
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            label="Custom Logic"
+            value={config.customLogic || ''}
+            onChange={(e) => handleConfigChange('customLogic', e.target.value)}
+            helperText="Enter custom JavaScript logic (e.g., user.purchases > 0)"
+          />
+        </Grid>
+      )}
     </Grid>
   );
 

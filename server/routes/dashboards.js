@@ -74,7 +74,7 @@ router.post('/', auth, async (req, res) => {
 // Update dashboard
 router.put('/:id', auth, async (req, res) => {
   try {
-    // Allow ANY user to update ANY dashboard
+    // Allow ANY user to edit ANY dashboard (public collaborative system)
     const dashboard = await Dashboard.findOne({
       _id: req.params.id,
       isActive: true
@@ -94,12 +94,19 @@ router.put('/:id', auth, async (req, res) => {
     if (theme) updates.theme = theme;
     if (settings) updates.settings = settings;
 
-    Object.assign(dashboard, updates);
-    await dashboard.save();
+    // Use findByIdAndUpdate to avoid version conflicts
+    const updatedDashboard = await Dashboard.findByIdAndUpdate(
+      dashboard._id,
+      updates,
+      { 
+        new: true, 
+        runValidators: true
+      }
+    )
+    .populate('owner', 'username email')
+    .populate('collaborators.user', 'username email');
 
-    const updatedDashboard = await Dashboard.findById(dashboard._id)
-      .populate('owner', 'username email')
-      .populate('collaborators.user', 'username email');
+    console.log(`Dashboard ${dashboard._id} updated by user ${req.user.username}`);
 
     res.json({
       message: 'Dashboard updated successfully',

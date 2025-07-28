@@ -539,7 +539,7 @@ const AnalyticsPanel = ({ campaign }) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {analytics.stepAnalytics.map((step) => (
+              {(analytics.stepAnalytics || []).map((step) => (
                 <TableRow key={step.stepNumber}>
                   <TableCell>{step.name}</TableCell>
                   <TableCell align="right">{step.sent}</TableCell>
@@ -566,7 +566,7 @@ const AnalyticsPanel = ({ campaign }) => {
               Recent Activity
             </Typography>
             <List dense>
-              {analytics.recentActivity.map((activity, index) => (
+              {(analytics.recentActivity || []).map((activity, index) => (
                 <ListItem key={index}>
                   <ListItemIcon>
                     {activity.type === 'open' && <OpenInNewIcon color="success" />}
@@ -589,7 +589,7 @@ const AnalyticsPanel = ({ campaign }) => {
             </Typography>
             <Box sx={{ height: 200 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={analytics.performanceChart}>
+                <LineChart data={analytics.performanceChart || []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />

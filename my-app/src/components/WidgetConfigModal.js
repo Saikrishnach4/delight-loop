@@ -19,6 +19,7 @@ import {
   Grid,
   Chip,
   IconButton,
+  Slider,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -31,8 +32,12 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [config, setConfig] = useState({});
 
+  // Debug logging
+  console.log('WidgetConfigModal render - open:', open, 'widget:', widget?.type);
+
   useEffect(() => {
     if (widget) {
+      console.log('Setting config from widget:', widget.config);
       setConfig({ ...widget.config });
     }
   }, [widget]);
@@ -45,6 +50,7 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
   };
 
   const handleSave = () => {
+    console.log('Saving widget config:', config);
     onUpdate({
       config: config
     });
@@ -123,6 +129,7 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
               <MenuItem value="line">Line Chart</MenuItem>
               <MenuItem value="bar">Bar Chart</MenuItem>
               <MenuItem value="pie">Pie Chart</MenuItem>
+              <MenuItem value="doughnut">Doughnut Chart</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -134,6 +141,29 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
             onChange={(e) => handleConfigChange('dataSource', e.target.value)}
             placeholder="API endpoint or data source"
           />
+        </Grid>
+        <Grid item xs={12}>
+          <Typography gutterBottom>Chart Colors</Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {['#1976d2', '#dc004e', '#388e3c', '#ff9800', '#9c27b0'].map((color, index) => (
+              <Box
+                key={index}
+                sx={{
+                  width: 30,
+                  height: 30,
+                  backgroundColor: color,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  border: config.colors?.[index] === color ? '3px solid #333' : '2px solid #ccc',
+                }}
+                onClick={() => {
+                  const newColors = [...(config.colors || ['#1976d2', '#dc004e', '#388e3c'])];
+                  newColors[index] = color;
+                  handleConfigChange('colors', newColors);
+                }}
+              />
+            ))}
+          </Box>
         </Grid>
       </Grid>
     </Box>
@@ -161,6 +191,28 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
             value={config.columns?.join(', ') || ''}
             onChange={(e) => handleConfigChange('columns', e.target.value.split(',').map(col => col.trim()))}
             placeholder="Name, Value, Status"
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.sortable || false}
+                onChange={(e) => handleConfigChange('sortable', e.target.checked)}
+              />
+            }
+            label="Sortable"
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.paginated || false}
+                onChange={(e) => handleConfigChange('paginated', e.target.checked)}
+              />
+            }
+            label="Paginated"
           />
         </Grid>
       </Grid>
@@ -196,6 +248,35 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
             </Select>
           </FormControl>
         </Grid>
+        <Grid item xs={6}>
+          <TextField
+            fullWidth
+            label="Decimal Places"
+            type="number"
+            value={config.decimalPlaces || 0}
+            onChange={(e) => handleConfigChange('decimalPlaces', parseInt(e.target.value))}
+            inputProps={{ min: 0, max: 4 }}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <Typography gutterBottom>Metric Color</Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {['#1976d2', '#dc004e', '#388e3c', '#ff9800', '#9c27b0'].map((color) => (
+              <Box
+                key={color}
+                sx={{
+                  width: 30,
+                  height: 30,
+                  backgroundColor: color,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  border: config.color === color ? '3px solid #333' : '2px solid #ccc',
+                }}
+                onClick={() => handleConfigChange('color', color)}
+              />
+            ))}
+          </Box>
+        </Grid>
       </Grid>
     </Box>
   );
@@ -227,6 +308,98 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
             inputProps={{ min: 8, max: 72 }}
           />
         </Grid>
+        <Grid item xs={6}>
+          <FormControl fullWidth>
+            <InputLabel>Font Weight</InputLabel>
+            <Select
+              value={config.fontWeight || 'normal'}
+              label="Font Weight"
+              onChange={(e) => handleConfigChange('fontWeight', e.target.value)}
+            >
+              <MenuItem value="normal">Normal</MenuItem>
+              <MenuItem value="bold">Bold</MenuItem>
+              <MenuItem value="lighter">Light</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12}>
+          <Typography gutterBottom>Text Color</Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {['#000000', '#333333', '#666666', '#1976d2', '#dc004e'].map((color) => (
+              <Box
+                key={color}
+                sx={{
+                  width: 30,
+                  height: 30,
+                  backgroundColor: color,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  border: config.color === color ? '3px solid #333' : '2px solid #ccc',
+                }}
+                onClick={() => handleConfigChange('color', color)}
+              />
+            ))}
+          </Box>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+
+  const renderImageSettings = () => (
+    <Box>
+      <Typography variant="h6" gutterBottom>
+        Image Settings
+      </Typography>
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Image URL"
+            value={config.imageUrl || ''}
+            onChange={(e) => handleConfigChange('imageUrl', e.target.value)}
+            placeholder="https://example.com/image.jpg"
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Alt Text"
+            value={config.altText || ''}
+            onChange={(e) => handleConfigChange('altText', e.target.value)}
+            placeholder="Description of the image"
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Caption"
+            value={config.caption || ''}
+            onChange={(e) => handleConfigChange('caption', e.target.value)}
+            placeholder="Image caption"
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.showCaption || false}
+                onChange={(e) => handleConfigChange('showCaption', e.target.checked)}
+              />
+            }
+            label="Show Caption"
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.maintainAspectRatio || true}
+                onChange={(e) => handleConfigChange('maintainAspectRatio', e.target.checked)}
+              />
+            }
+            label="Maintain Aspect Ratio"
+          />
+        </Grid>
       </Grid>
     </Box>
   );
@@ -241,6 +414,8 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
         return renderMetricSettings();
       case 'text':
         return renderTextSettings();
+      case 'image':
+        return renderImageSettings();
       default:
         return (
           <Typography color="text.secondary">
@@ -249,6 +424,58 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
         );
     }
   };
+
+  const renderStyleSettings = () => (
+    <Box>
+      <Typography variant="h6" gutterBottom>
+        Style Settings
+      </Typography>
+      <Grid container spacing={2}>
+        <Grid item xs={6}>
+          <TextField
+            fullWidth
+            type="number"
+            label="Border Radius (px)"
+            value={config.borderRadius || 4}
+            onChange={(e) => handleConfigChange('borderRadius', parseInt(e.target.value))}
+            inputProps={{ min: 0, max: 20 }}
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <TextField
+            fullWidth
+            type="number"
+            label="Padding (px)"
+            value={config.padding || 16}
+            onChange={(e) => handleConfigChange('padding', parseInt(e.target.value))}
+            inputProps={{ min: 0, max: 50 }}
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.showBorder || false}
+                onChange={(e) => handleConfigChange('showBorder', e.target.checked)}
+              />
+            }
+            label="Show Border"
+          />
+        </Grid>
+        <Grid item xs={12}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.showShadow || false}
+                onChange={(e) => handleConfigChange('showShadow', e.target.checked)}
+              />
+            }
+            label="Show Shadow"
+          />
+        </Grid>
+      </Grid>
+    </Box>
+  );
 
   const tabs = [
     { label: 'General', icon: <SettingsIcon /> },
@@ -295,16 +522,7 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
 
         {activeTab === 0 && renderGeneralSettings()}
         {activeTab === 1 && renderWidgetSpecificSettings()}
-        {activeTab === 2 && (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              Style Settings
-            </Typography>
-            <Typography color="text.secondary">
-              Style settings will be implemented in the next phase.
-            </Typography>
-          </Box>
-        )}
+        {activeTab === 2 && renderStyleSettings()}
       </DialogContent>
 
       <DialogActions>

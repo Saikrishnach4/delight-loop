@@ -19,6 +19,7 @@ import {
   TextFields as TextIcon,
   Email as EmailIcon,
   Search as SearchIcon,
+  DragIndicator as DragIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -26,6 +27,7 @@ const WidgetSelector = ({ open, onClose, onSelectWidget }) => {
   const [widgetTypes, setWidgetTypes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [draggedWidget, setDraggedWidget] = useState(null);
 
   useEffect(() => {
     fetchWidgetTypes();
@@ -74,6 +76,13 @@ const WidgetSelector = ({ open, onClose, onSelectWidget }) => {
       category: 'Content'
     },
     {
+      type: 'image',
+      name: 'Image',
+      description: 'Display images or graphics',
+      icon: '🖼️',
+      category: 'Media'
+    },
+    {
       type: 'email-campaign',
       name: 'Email Campaign',
       description: 'Email campaign management widget',
@@ -103,6 +112,17 @@ const WidgetSelector = ({ open, onClose, onSelectWidget }) => {
     console.log('Widget selected:', widgetType);
     onSelectWidget(widgetType.type);
     onClose();
+  };
+
+  // Drag and Drop handlers
+  const handleDragStart = (e, widget) => {
+    setDraggedWidget(widget);
+    e.dataTransfer.setData('application/json', JSON.stringify(widget));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedWidget(null);
   };
 
   const groupedWidgets = filteredWidgetTypes.reduce((groups, widget) => {
@@ -163,19 +183,40 @@ const WidgetSelector = ({ open, onClose, onSelectWidget }) => {
                   {widgets.map((widget) => (
                     <Grid item xs={12} sm={6} md={4} key={widget.type}>
                       <Card
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, widget)}
+                        onDragEnd={handleDragEnd}
                         sx={{
-                          cursor: 'pointer',
+                          cursor: 'grab',
                           height: '100%',
                           transition: 'all 0.2s ease-in-out',
+                          transform: draggedWidget?.type === widget.type ? 'scale(0.95)' : 'scale(1)',
+                          opacity: draggedWidget?.type === widget.type ? 0.7 : 1,
                           '&:hover': {
                             transform: 'translateY(-2px)',
                             boxShadow: 3,
                             border: '1px solid #1976d2',
                           },
+                          '&:active': {
+                            cursor: 'grabbing',
+                          },
                         }}
                         onClick={() => handleWidgetSelect(widget)}
                       >
-                        <CardContent sx={{ textAlign: 'center', p: 2 }}>
+                        <CardContent sx={{ textAlign: 'center', p: 2, position: 'relative' }}>
+                          {/* Drag Indicator */}
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              color: 'text.secondary',
+                              opacity: 0.6,
+                            }}
+                          >
+                            <DragIcon fontSize="small" />
+                          </Box>
+                          
                           <Box sx={{ mb: 1 }}>
                             {getWidgetIcon(widget.type)}
                           </Box>
@@ -191,6 +232,19 @@ const WidgetSelector = ({ open, onClose, onSelectWidget }) => {
                             variant="outlined"
                             color="primary"
                           />
+                          
+                          {/* Drag Instructions */}
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary" 
+                            sx={{ 
+                              display: 'block', 
+                              mt: 1,
+                              fontStyle: 'italic'
+                            }}
+                          >
+                            Drag to canvas or click to add
+                          </Typography>
                         </CardContent>
                       </Card>
                     </Grid>

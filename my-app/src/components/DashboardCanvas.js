@@ -73,6 +73,33 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
     }
   }, [socket]);
 
+  // Handle drag and drop from widget selector
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    
+    try {
+      const widgetData = JSON.parse(e.dataTransfer.getData('application/json'));
+      
+      // Calculate drop position relative to canvas
+      const canvasRect = e.currentTarget.getBoundingClientRect();
+      const dropX = e.clientX - canvasRect.left;
+      const dropY = e.clientY - canvasRect.top;
+      
+      // Convert to grid coordinates (approximate)
+      const gridX = Math.floor((dropX / canvasRect.width) * 12);
+      const gridY = Math.floor((dropY / 60)); // Assuming 60px row height
+      
+      handleAddWidget(widgetData.type, { x: gridX, y: gridY });
+    } catch (error) {
+      console.error('Error parsing dropped widget data:', error);
+    }
+  };
+
   const handleLayoutChange = (newLayout) => {
     setLayout(newLayout);
     
@@ -99,24 +126,18 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
     });
   };
 
-  const handleAddWidget = (widgetType) => {
-    console.log('Adding widget:', widgetType);
+  const handleAddWidget = (widgetType, position = null) => {
+    
+    const defaultPosition = position || { x: 0, y: 0, w: 6, h: 4 };
     
     const newWidget = {
       id: `widget-${Date.now()}`,
       type: widgetType,
-      position: {
-        x: 0,
-        y: 0,
-        w: 6,
-        h: 4
-      },
+      position: defaultPosition,
       config: getDefaultConfig(widgetType),
       style: {},
       isVisible: true
     };
-
-    console.log('New widget created:', newWidget);
 
     // Add widget to context
     addWidget(newWidget);
@@ -127,7 +148,6 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
       widgets: [...(dashboard.widgets || []), newWidget]
     };
     
-    console.log('Updated dashboard:', updatedDashboard);
     onUpdateDashboard(updatedDashboard);
     
     setShowWidgetSelector(false);
@@ -139,19 +159,36 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
 
   const handleWidgetUpdate = (widgetId, updates) => {
     updateWidget(widgetId, updates);
+    
+    // Also update the local dashboard state
+    const updatedWidgets = dashboard.widgets.map(widget => 
+      widget.id === widgetId ? { ...widget, ...updates } : widget
+    );
+    
+    onUpdateDashboard({
+      ...dashboard,
+      widgets: updatedWidgets
+    });
   };
 
   const handleWidgetDelete = (widgetId) => {
     if (window.confirm('Are you sure you want to delete this widget?')) {
       removeWidget(widgetId);
+      
+      // Also update the local dashboard state
+      const updatedWidgets = dashboard.widgets.filter(widget => widget.id !== widgetId);
+      onUpdateDashboard({
+        ...dashboard,
+        widgets: updatedWidgets
+      });
     }
   };
 
   const getDefaultConfig = (widgetType) => {
     const configs = {
       chart: {
-        chartType: 'line',
         title: 'New Chart',
+        chartType: 'line',
         dataSource: 'sample-data',
         colors: ['#1976d2', '#dc004e', '#388e3c']
       },
@@ -167,12 +204,20 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
         color: '#1976d2'
       },
       text: {
+        title: 'New Text Widget',
         content: 'Enter your text here...',
         fontSize: 16,
         fontWeight: 'normal',
         color: '#000000'
       },
+      image: {
+        title: 'New Image',
+        imageUrl: 'https://via.placeholder.com/300x200',
+        altText: 'Sample image',
+        caption: 'Image caption'
+      },
       'email-campaign': {
+        title: 'Email Campaign',
         campaignId: '',
         displayMode: 'overview',
         refreshInterval: 30000
@@ -190,7 +235,17 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
   }
 
   return (
-    <Box sx={{ height: '100%', position: 'relative' }}>
+    <Box 
+      sx={{ 
+        height: '100%',
+        backgroundColor: dashboard.theme?.background || '#f5f5f5',
+        color: dashboard.theme?.text || '#000000',
+        fontFamily: dashboard.theme?.typography?.fontFamily || 'inherit',
+        fontSize: dashboard.theme?.typography?.fontSize || 14,
+        fontWeight: dashboard.theme?.typography?.fontWeight || 400,
+        lineHeight: dashboard.theme?.typography?.lineHeight || 1.5,
+      }}
+    >
       {/* Dashboard Header */}
       <Box 
         sx={{ 
@@ -199,22 +254,38 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
           alignItems: 'center',
           mb: 2,
           p: 2,
-          backgroundColor: 'background.paper',
-          borderRadius: 1
+          backgroundColor: dashboard.theme?.colors?.surface || 'background.paper',
+          borderRadius: dashboard.theme?.spacing?.borderRadius || 1,
+          border: `1px solid ${dashboard.theme?.border || '#e0e0e0'}`,
+          boxShadow: dashboard.theme?.shadows?.enabled ? `${dashboard.theme?.shadows?.intensity || 1}px 2px 4px rgba(0,0,0,0.1)` : 1,
         }}
       >
-        <Typography variant="h6">{dashboard.name}</Typography>
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            color: dashboard.theme?.text || 'inherit',
+            fontFamily: dashboard.theme?.typography?.fontFamily || 'inherit',
+            fontSize: dashboard.theme?.typography?.fontSize ? dashboard.theme.typography.fontSize * 1.25 : 'inherit',
+            fontWeight: dashboard.theme?.typography?.fontWeight || 'bold',
+          }}
+        >
+          {dashboard.name}
+        </Typography>
         <Box>
           <Tooltip title="Add Widget">
             <IconButton 
               onClick={() => setShowWidgetSelector(true)}
               color="primary"
+              sx={{ color: dashboard.theme?.primary || '#1976d2' }}
             >
               <AddIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="Dashboard Settings">
-            <IconButton color="primary">
+            <IconButton 
+              color="primary"
+              sx={{ color: dashboard.theme?.primary || '#1976d2' }}
+            >
               <SettingsIcon />
             </IconButton>
           </Tooltip>
@@ -226,9 +297,13 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
         sx={{ 
           p: 2, 
           minHeight: '70vh',
-          backgroundColor: '#fafafa',
-          position: 'relative'
+          backgroundColor: dashboard.theme?.background || '#fafafa',
+          position: 'relative',
+          border: `1px solid ${dashboard.theme?.border || '#e0e0e0'}`,
+          borderRadius: dashboard.theme?.spacing?.borderRadius || 4,
         }}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         {dashboard.widgets && dashboard.widgets.length > 0 ? (
           <ResponsiveGridLayout
@@ -247,6 +322,7 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
               <Box key={widget.id} data-grid={widget.position}>
                 <Widget
                   widget={widget}
+                  theme={dashboard.theme}
                   onSelect={() => handleWidgetSelect(widget)}
                   onUpdate={(updates) => handleWidgetUpdate(widget.id, updates)}
                   onDelete={() => handleWidgetDelete(widget.id)}
@@ -264,21 +340,39 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
             minHeight="60vh"
             textAlign="center"
           >
-            <Typography variant="h6" color="text.secondary" gutterBottom>
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                color: dashboard.theme?.text || 'text.secondary',
+                fontFamily: dashboard.theme?.typography?.fontFamily || 'inherit',
+                fontSize: dashboard.theme?.typography?.fontSize ? dashboard.theme.typography.fontSize * 1.5 : 'inherit',
+                fontWeight: dashboard.theme?.typography?.fontWeight || 'bold',
+                mb: 2,
+              }}
+              gutterBottom
+            >
               No widgets yet
             </Typography>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              Add your first widget to start building your dashboard
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: dashboard.theme?.text || 'text.secondary',
+                fontFamily: dashboard.theme?.typography?.fontFamily || 'inherit',
+                fontSize: dashboard.theme?.typography?.fontSize || 14,
+                mb: 3,
+              }}
+            >
+              Drag widgets from the selector or click the + button to start building your dashboard
             </Typography>
             <IconButton
               onClick={() => setShowWidgetSelector(true)}
               color="primary"
               size="large"
               sx={{ 
-                backgroundColor: 'primary.main',
+                backgroundColor: dashboard.theme?.primary || 'primary.main',
                 color: 'white',
                 '&:hover': {
-                  backgroundColor: 'primary.dark',
+                  backgroundColor: dashboard.theme?.colors?.primaryDark || 'primary.dark',
                 }
               }}
             >

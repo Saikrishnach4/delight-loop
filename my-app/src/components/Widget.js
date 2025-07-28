@@ -28,11 +28,12 @@ import EmailCampaignWidget from './widgets/EmailCampaignWidget';
 import ImageWidget from './widgets/ImageWidget';
 import WidgetConfigModal from './WidgetConfigModal';
 
-const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
+const Widget = ({ widget, theme, onSelect, onUpdate, onDelete, isSelected }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [showConfig, setShowConfig] = useState(false);
 
   const handleMenuOpen = (event) => {
+    event.preventDefault();
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
   };
@@ -59,7 +60,19 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
       config: { ...widget.config, title: `${widget.config.title} (Copy)` }
     };
     // This would need to be handled by the parent component
-    console.log('Duplicate widget:', duplicatedWidget);
+  };
+
+  const handleConfigUpdate = (updates) => {
+    onUpdate(updates);
+    setShowConfig(false);
+  };
+
+  const handleCardClick = (event) => {
+    // Don't trigger selection if clicking on the menu button
+    if (event.target.closest('[data-menu-button]')) {
+      return;
+    }
+    onSelect();
   };
 
   const renderWidgetContent = () => {
@@ -94,14 +107,23 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
         display: 'flex',
         flexDirection: 'column',
         cursor: 'pointer',
-        border: isSelected ? '2px solid #1976d2' : '1px solid #e0e0e0',
+        border: isSelected 
+          ? `2px solid ${theme?.primary || '#1976d2'}` 
+          : `1px solid ${theme?.border || '#e0e0e0'}`,
+        borderRadius: theme?.spacing?.borderRadius || 4,
+        backgroundColor: theme?.background || '#ffffff',
+        color: theme?.text || '#000000',
+        fontFamily: theme?.typography?.fontFamily || 'inherit',
+        fontSize: theme?.typography?.fontSize || 14,
+        fontWeight: theme?.typography?.fontWeight || 400,
+        lineHeight: theme?.typography?.lineHeight || 1.5,
         '&:hover': {
-          boxShadow: 3,
-          border: '1px solid #1976d2',
+          boxShadow: theme?.shadows?.enabled ? `${theme?.shadows?.intensity || 1}px 2px 8px rgba(0,0,0,0.1)` : 3,
+          border: `1px solid ${theme?.primary || '#1976d2'}`,
         },
         transition: 'all 0.2s ease-in-out',
       }}
-      onClick={() => onSelect()}
+      onClick={handleCardClick}
     >
       {/* Widget Header */}
       <Box
@@ -110,19 +132,21 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
           justifyContent: 'space-between',
           alignItems: 'center',
           p: 1,
-          borderBottom: '1px solid #e0e0e0',
-          backgroundColor: '#f5f5f5',
+          borderBottom: `1px solid ${theme?.border || '#e0e0e0'}`,
+          backgroundColor: theme?.colors?.surface || '#f5f5f5',
         }}
       >
         <Typography
           variant="subtitle2"
           sx={{
-            fontWeight: 'medium',
-            color: '#333',
+            fontWeight: theme?.typography?.fontWeight || 'medium',
+            color: theme?.text || '#333',
             flex: 1,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            fontFamily: theme?.typography?.fontFamily || 'inherit',
+            fontSize: theme?.typography?.fontSize || 14,
           }}
         >
           {widget.config?.title || `${widget.type} Widget`}
@@ -131,9 +155,15 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title="Widget Options">
             <IconButton
+              data-menu-button="true"
               size="small"
               onClick={handleMenuOpen}
-              sx={{ p: 0.5 }}
+              sx={{ 
+                p: 0.5,
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                }
+              }}
             >
               <MoreVertIcon fontSize="small" />
             </IconButton>
@@ -145,10 +175,11 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
       <CardContent
         sx={{
           flex: 1,
-          p: 1,
-          '&:last-child': { pb: 1 },
+          p: theme?.spacing?.unit ? theme.spacing.unit / 8 : 1,
+          '&:last-child': { pb: theme?.spacing?.unit ? theme.spacing.unit / 8 : 1 },
           display: 'flex',
           flexDirection: 'column',
+          backgroundColor: theme?.background || '#ffffff',
         }}
       >
         {renderWidgetContent()}
@@ -167,6 +198,7 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
           vertical: 'top',
           horizontal: 'right',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <MenuItem onClick={handleEdit}>
           <ListItemIcon>
@@ -180,7 +212,10 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
           </ListItemIcon>
           <ListItemText>Duplicate</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => setShowConfig(true)}>
+        <MenuItem onClick={() => {
+          handleMenuClose();
+          setShowConfig(true);
+        }}>
           <ListItemIcon>
             <SettingsIcon fontSize="small" />
           </ListItemIcon>
@@ -200,7 +235,7 @@ const Widget = ({ widget, onSelect, onUpdate, onDelete, isSelected }) => {
           widget={widget}
           open={showConfig}
           onClose={() => setShowConfig(false)}
-          onUpdate={onUpdate}
+          onUpdate={handleConfigUpdate}
         />
       )}
     </Card>
