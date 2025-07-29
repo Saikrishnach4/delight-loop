@@ -347,7 +347,8 @@ router.post('/check-triggers', auth, async (req, res) => {
   try {
     console.log('🔍 Manual trigger check requested');
     await emailCampaignEngine.checkTimeTriggers();
-    res.json({ message: 'Time delay triggers checked successfully' });
+    await emailCampaignEngine.checkIdleTimeTriggers();
+    res.json({ message: 'Time delay and idle time triggers checked successfully' });
   } catch (error) {
     console.error('Error checking triggers:', error);
     res.status(500).json({ error: error.message });

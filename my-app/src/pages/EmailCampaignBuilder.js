@@ -58,6 +58,9 @@ const EmailCampaignBuilder = () => {
   const [testResult, setTestResult] = useState(null);
   const [sendToSpecificOpen, setSendToSpecificOpen] = useState(false);
   const [selectedRecipients, setSelectedRecipients] = useState([]);
+  const [clickTrackingEmail, setClickTrackingEmail] = useState('');
+  const [clickTrackingUrl, setClickTrackingUrl] = useState('');
+  const [generatedClickLink, setGeneratedClickLink] = useState('');
 
   useEffect(() => {
     if (id === 'new') {
@@ -306,6 +309,15 @@ const EmailCampaignBuilder = () => {
     }
   };
 
+  const handleGenerateClickLink = () => {
+    if (!clickTrackingEmail || !clickTrackingUrl) {
+      alert('Please enter both Recipient Email and Destination URL.');
+      return;
+    }
+    const generatedLink = `http://localhost:5000/api/campaigns/track/click/${id}/${encodeURIComponent(clickTrackingEmail)}?url=${encodeURIComponent(clickTrackingUrl)}`;
+    setGeneratedClickLink(generatedLink);
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -435,10 +447,12 @@ const EmailCampaignBuilder = () => {
                 Email Template
               </Typography>
               
+
+              
               <TextField
                 fullWidth
-                label="Subject Line"
-                value={campaign.emailTemplate?.subject || ''}
+                label="Subject"
+                value={campaign.emailTemplate.subject}
                 onChange={(e) => setCampaign({
                   ...campaign,
                   emailTemplate: { ...campaign.emailTemplate, subject: e.target.value }
@@ -447,16 +461,17 @@ const EmailCampaignBuilder = () => {
               />
               
               <TextField
+                id="email-body"
                 fullWidth
                 multiline
-                rows={4}
+                rows={8}
                 label="Email Body"
-                value={campaign.emailTemplate?.body || ''}
+                value={campaign.emailTemplate.body}
                 onChange={(e) => setCampaign({
                   ...campaign,
                   emailTemplate: { ...campaign.emailTemplate, body: e.target.value }
                 })}
-                sx={{ mb: 2 }}
+                placeholder="Write your email content here..."
               />
               
               <Grid container spacing={2}>
@@ -603,42 +618,37 @@ const EmailCampaignBuilder = () => {
                 Send follow-up emails when users interact with your emails
               </Typography>
               
-              {['open', 'click', 'idle'].map((behavior) => {
+              {['open', 'click', 'idle'].map(behavior => {
                 const existingTrigger = campaign.behaviorTriggers?.find(t => t.behavior === behavior);
+                
                 return (
-                  <Box key={behavior} sx={{ mb: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                      <Typography variant="subtitle2" sx={{ textTransform: 'capitalize' }}>
+                  <Box key={behavior} mb={2} p={2} border="1px solid #ddd" borderRadius={1}>
+                    <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                      <Typography variant="subtitle1" sx={{ textTransform: 'capitalize' }}>
                         On {behavior}
                       </Typography>
                       <Button
                         size="small"
                         variant={existingTrigger?.enabled ? "contained" : "outlined"}
                         onClick={() => {
-                          if (existingTrigger) {
-                            // Toggle existing trigger
-                            setCampaign({
-                              ...campaign,
-                              behaviorTriggers: campaign.behaviorTriggers.map(t =>
-                                t.behavior === behavior
-                                  ? { ...t, enabled: !t.enabled }
-                                  : t
-                              )
-                            });
+                          const updatedTriggers = campaign.behaviorTriggers || [];
+                          const existingIndex = updatedTriggers.findIndex(t => t.behavior === behavior);
+                          
+                          if (existingIndex >= 0) {
+                            updatedTriggers[existingIndex].enabled = !updatedTriggers[existingIndex].enabled;
                           } else {
-                            // Add new trigger
-                            setCampaign({
-                              ...campaign,
-                              behaviorTriggers: [
-                                ...(campaign.behaviorTriggers || []),
-                                {
-                                  behavior,
-                                  enabled: true,
-                                  followUpEmail: { subject: '', body: '' }
-                                }
-                              ]
+                            updatedTriggers.push({
+                              behavior,
+                              enabled: true,
+                              idleTime: { enabled: false, minutes: 30 },
+                              followUpEmail: { subject: '', body: '' }
                             });
                           }
+                          
+                          setCampaign({
+                            ...campaign,
+                            behaviorTriggers: updatedTriggers
+                          });
                         }}
                       >
                         {existingTrigger?.enabled ? 'Enabled' : 'Enable'}
@@ -647,6 +657,76 @@ const EmailCampaignBuilder = () => {
                     
                     {existingTrigger?.enabled && (
                       <Box>
+                        {/* Idle Time Configuration - Only for 'idle' behavior */}
+                        {behavior === 'idle' && (
+                          <Box mb={2} p={2} bgcolor="grey.50" borderRadius={1}>
+                            <Typography variant="subtitle2" gutterBottom>
+                              Idle Time Configuration
+                            </Typography>
+                            <Box display="flex" alignItems="center" gap={2}>
+                              <FormControl size="small">
+                                <InputLabel>Idle Time</InputLabel>
+                                <Select
+                                  value={existingTrigger.idleTime?.enabled ? 'enabled' : 'disabled'}
+                                  onChange={(e) => {
+                                    const updatedTriggers = campaign.behaviorTriggers.map(t =>
+                                      t.behavior === behavior
+                                        ? {
+                                            ...t,
+                                            idleTime: {
+                                              ...t.idleTime,
+                                              enabled: e.target.value === 'enabled'
+                                            }
+                                          }
+                                        : t
+                                    );
+                                    setCampaign({
+                                      ...campaign,
+                                      behaviorTriggers: updatedTriggers
+                                    });
+                                  }}
+                                  label="Idle Time"
+                                >
+                                  <MenuItem value="disabled">Disabled</MenuItem>
+                                  <MenuItem value="enabled">Enabled</MenuItem>
+                                </Select>
+                              </FormControl>
+                              
+                              {existingTrigger.idleTime?.enabled && (
+                                <TextField
+                                  size="small"
+                                  type="number"
+                                  label="Minutes"
+                                  value={existingTrigger.idleTime?.minutes || 30}
+                                  onChange={(e) => {
+                                    const updatedTriggers = campaign.behaviorTriggers.map(t =>
+                                      t.behavior === behavior
+                                        ? {
+                                            ...t,
+                                            idleTime: {
+                                              ...t.idleTime,
+                                              minutes: parseInt(e.target.value) || 30
+                                            }
+                                          }
+                                        : t
+                                    );
+                                    setCampaign({
+                                      ...campaign,
+                                      behaviorTriggers: updatedTriggers
+                                    });
+                                  }}
+                                  sx={{ width: 100 }}
+                                  inputProps={{ min: 1, max: 1440 }}
+                                  helperText="1-1440 minutes"
+                                />
+                              )}
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              Send reminder email if user doesn't click/open within this time
+                            </Typography>
+                          </Box>
+                        )}
+                        
                         <TextField
                           fullWidth
                           size="small"
@@ -861,119 +941,100 @@ const EmailCampaignBuilder = () => {
                 </Box>
               )}
 
-              {/* Tracking URLs for Testing */}
-              <Box mt={3} p={2} bgcolor="info.light" borderRadius={1}>
-                <Typography variant="subtitle2" gutterBottom>
-                  🔗 <strong>Automatic Tracking URLs (for testing):</strong>
+              {/* Test Behavior Triggers */}
+              <Box mt={3}>
+                <Typography variant="h6" gutterBottom>
+                  Test Behavior Triggers
                 </Typography>
-                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                  <strong>Open Tracking:</strong><br />
-                  {`http://localhost:5000/api/campaigns/track/open/${id}/RECIPIENT_EMAIL`}<br /><br />
-                  <strong>Click Tracking:</strong><br />
-                  {`http://localhost:5000/api/campaigns/track/click/${id}/RECIPIENT_EMAIL?url=ORIGINAL_URL`}
-                </Typography>
-                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                  💡 These URLs are automatically added to emails. When users open/click emails, these URLs are called automatically!
-                </Typography>
-                
-                {/* Click Tracking Link Generator */}
-                <Box mt={2} p={2} bgcolor="warning.light" borderRadius={1}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    🔗 <strong>Generate Click Tracking Link:</strong>
-                  </Typography>
+                <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
                   <TextField
                     size="small"
                     label="Recipient Email"
                     value={testBehavior.email}
-                    onChange={(e) => setTestBehavior(prev => ({ ...prev, email: e.target.value }))}
+                    onChange={(e) => setTestBehavior({ ...testBehavior, email: e.target.value })}
+                    placeholder="Enter email to test tracking"
+                  />
+                  <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <InputLabel>Behavior</InputLabel>
+                    <Select
+                      value={testBehavior.behavior}
+                      onChange={(e) => setTestBehavior({ ...testBehavior, behavior: e.target.value })}
+                      label="Behavior"
+                    >
+                      <MenuItem value="open">Open</MenuItem>
+                      <MenuItem value="click">Click</MenuItem>
+                      <MenuItem value="idle">Idle</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="outlined"
+                    onClick={handleTestBehavior}
+                    disabled={!testBehavior.email}
+                  >
+                    Test
+                  </Button>
+                </Box>
+                {testResult && (
+                  <Alert severity={testResult.success ? 'success' : 'error'} sx={{ mt: 2 }}>
+                    {testResult.message}
+                  </Alert>
+                )}
+              </Box>
+
+              {/* Generate Click Tracking Link */}
+              <Box mt={3}>
+                <Typography variant="h6" gutterBottom>
+                  Generate Click Tracking Link
+                </Typography>
+                <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                  <TextField
+                    size="small"
+                    label="Recipient Email"
+                    value={clickTrackingEmail}
+                    onChange={(e) => setClickTrackingEmail(e.target.value)}
                     placeholder="Enter recipient email"
-                    sx={{ mr: 1, width: 200 }}
                   />
                   <TextField
                     size="small"
                     label="Destination URL"
+                    value={clickTrackingUrl}
+                    onChange={(e) => setClickTrackingUrl(e.target.value)}
                     placeholder="https://example.com"
-                    defaultValue="https://example.com"
-                    sx={{ mr: 1, width: 200 }}
-                    onChange={(e) => {
-                      const destinationUrl = e.target.value;
-                      if (testBehavior.email && destinationUrl) {
-                        const clickTrackingUrl = `http://localhost:5000/api/campaigns/track/click/${id}/${encodeURIComponent(testBehavior.email)}?url=${encodeURIComponent(destinationUrl)}`;
-                        console.log('Generated click tracking URL:', clickTrackingUrl);
-                      }
-                    }}
-                  />
-                  <Button
-                    variant="contained"
-                    size="small"
-                    onClick={() => {
-                      const destinationUrl = document.querySelector('input[placeholder="https://example.com"]').value || 'https://example.com';
-                      if (testBehavior.email) {
-                        const clickTrackingUrl = `http://localhost:5000/api/campaigns/track/click/${id}/${encodeURIComponent(testBehavior.email)}?url=${encodeURIComponent(destinationUrl)}`;
-                        navigator.clipboard.writeText(clickTrackingUrl);
-                        alert('Click tracking URL copied to clipboard!');
-                      }
-                    }}
-                    disabled={!testBehavior.email}
-                  >
-                    Copy Link
-                  </Button>
-                </Box>
-                
-                {/* Manual Tracking Test */}
-                <Box mt={2}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    🧪 <strong>Test Tracking Manually:</strong>
-                  </Typography>
-                  <TextField
-                    size="small"
-                    label="Recipient Email"
-                    value={testBehavior.email}
-                    onChange={(e) => setTestBehavior(prev => ({ ...prev, email: e.target.value }))}
-                    placeholder="Enter email to test tracking"
-                    sx={{ mr: 1, width: 200 }}
+                    sx={{ minWidth: 200 }}
                   />
                   <Button
                     variant="outlined"
-                    size="small"
-                    onClick={() => {
-                      if (testBehavior.email) {
-                        const trackingUrl = `http://localhost:5000/api/campaigns/track/open/${id}/${encodeURIComponent(testBehavior.email)}`;
-                        window.open(trackingUrl, '_blank');
-                      }
-                    }}
-                    disabled={!testBehavior.email}
-                    sx={{ mr: 1 }}
+                    onClick={handleGenerateClickLink}
+                    disabled={!clickTrackingEmail || !clickTrackingUrl}
                   >
-                    Test Open Tracking
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={async () => {
-                      if (testBehavior.email) {
-                        try {
-                          const response = await fetch(`/api/campaigns/${id}/test-open/${encodeURIComponent(testBehavior.email)}`, {
-                            method: 'POST',
-                            headers: {
-                              'Authorization': `Bearer ${localStorage.getItem('token')}`
-                            }
-                          });
-                          const result = await response.json();
-                          setTestResult(result);
-                          if (result.success) {
-                            fetchCampaign(); // Refresh campaign data
-                          }
-                        } catch (error) {
-                          setTestResult({ success: false, message: 'Failed to test open behavior' });
-                        }
-                      }
-                    }}
-                    disabled={!testBehavior.email}
-                  >
-                    Test Open Behavior
+                    Generate Link
                   </Button>
                 </Box>
+                {generatedClickLink && (
+                  <Box mt={2}>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Generated Click Tracking Link:
+                    </Typography>
+                    <Box display="flex" gap={1} alignItems="center">
+                      <TextField
+                        fullWidth
+                        size="small"
+                        value={generatedClickLink}
+                        InputProps={{ readOnly: true }}
+                      />
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedClickLink);
+                          alert('Link copied to clipboard!');
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
               </Box>
             </CardContent>
           </Card>

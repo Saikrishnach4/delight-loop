@@ -35,6 +35,10 @@ const emailCampaignSchema = new mongoose.Schema({
       required: true
     },
     enabled: { type: Boolean, default: true },
+    idleTime: {
+      enabled: { type: Boolean, default: false },
+      minutes: { type: Number, default: 30 }
+    },
     followUpEmail: {
       subject: String,
       body: String
@@ -46,7 +50,9 @@ const emailCampaignSchema = new mongoose.Schema({
     lastActivity: Date,
     manualEmails: [{
       sentAt: Date,
-      timeDelayEmailSent: { type: Boolean, default: false }
+      timeDelayEmailSent: { type: Boolean, default: false },
+      idleEmailSent: { type: Boolean, default: false },
+      hasLinks: { type: Boolean, default: false } // Track if email contains clickable links
     }],
     status: {
       type: String,

@@ -35,12 +35,22 @@ class EmailCampaignEngine {
           if (!recipient.manualEmails) {
             recipient.manualEmails = [];
           }
+          
+          // Check if email template contains links
+          const emailContent = campaign.emailTemplate.body || '';
+          const hasLinks = emailContent.includes('<a href=') || emailContent.includes('http://') || emailContent.includes('https://');
+          
           recipient.manualEmails.push({
             sentAt: new Date(),
-            timeDelayEmailSent: false
+            timeDelayEmailSent: false,
+            idleEmailSent: false,
+            hasLinks: hasLinks
           });
           
           console.log(`📧 Added manual email entry for ${recipient.email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
+          if (hasLinks) {
+            console.log(`📧 Email contains links - will be eligible for idle tracking`);
+          }
           
           sentCount++;
           console.log(`✅ Manual email sent successfully to ${recipient.email}`);
@@ -269,6 +279,8 @@ class EmailCampaignEngine {
               const recipient = campaign.recipients.find(r => r.email === emailData.email);
               if (recipient && recipient.manualEmails[emailData.manualEmailIndex]) {
                 recipient.manualEmails[emailData.manualEmailIndex].timeDelayEmailSent = true;
+                // Mark follow-up email as having links for idle tracking
+                recipient.manualEmails[emailData.manualEmailIndex].hasLinks = true;
                 console.log(`✅ Time delay email sent and marked for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
               } else {
                 console.error(`❌ Recipient or manual email not found for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
@@ -292,6 +304,127 @@ class EmailCampaignEngine {
       }
     } catch (error) {
       console.error('❌ Error checking time triggers:', error);
+    }
+  }
+
+  // Check for idle time triggers
+  async checkIdleTimeTriggers() {
+    try {
+      console.log('⏰ Checking idle time triggers...', new Date().toLocaleTimeString());
+      
+      const allCampaigns = await EmailCampaign.find({});
+      console.log(`📧 Total campaigns in database: ${allCampaigns.length}`);
+      
+      const activeCampaigns = await EmailCampaign.find({ 
+        status: 'active'
+      });
+      
+      console.log(`📧 Found ${activeCampaigns.length} active campaigns`);
+      
+      if (activeCampaigns.length === 0) {
+        console.log('⚠️ No active campaigns found');
+        return;
+      }
+
+      for (const campaign of activeCampaigns) {
+        console.log(`📧 Checking campaign: ${campaign.name}`);
+        
+        // Find idle behavior triggers
+        const idleTriggers = campaign.behaviorTriggers.filter(t => 
+          t.behavior === 'idle' && t.enabled && t.idleTime?.enabled
+        );
+        
+        if (idleTriggers.length === 0) {
+          console.log(`📧 No enabled idle triggers found for campaign: ${campaign.name}`);
+          continue;
+        }
+
+        console.log(`📧 Found ${idleTriggers.length} idle triggers for campaign: ${campaign.name}`);
+        
+        for (const idleTrigger of idleTriggers) {
+          console.log(`📧 Checking idle trigger with ${idleTrigger.idleTime.minutes} minutes timeout`);
+          
+          const emailsToSend = [];
+          
+          for (const recipient of campaign.recipients) {
+            if (recipient.status !== 'active') {
+              continue;
+            }
+            
+            // Check each manual email for idle time
+            if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+              for (let i = 0; i < recipient.manualEmails.length; i++) {
+                const manualEmail = recipient.manualEmails[i];
+                
+                // Skip if idle email already sent for this manual email
+                if (manualEmail.idleEmailSent) {
+                  console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - idle email already sent`);
+                  continue;
+                }
+                
+                // Only send idle email if the email contains links OR if time delay email was already sent
+                // This ensures idle email comes after emails with links or follow-up emails
+                if (!manualEmail.hasLinks && !manualEmail.timeDelayEmailSent) {
+                  console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - no links and no time delay email sent yet`);
+                  continue;
+                }
+                
+                // If it's a time delay email, wait for it to be sent first
+                if (manualEmail.timeDelayEmailSent === false && campaign.timeDelayTrigger?.enabled) {
+                  console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - waiting for time delay email to be sent first`);
+                  continue;
+                }
+                
+                const timeSinceManualEmail = Date.now() - manualEmail.sentAt.getTime();
+                const idleTimeMs = idleTrigger.idleTime.minutes * 60 * 1000;
+                
+                const minutesSince = Math.round(timeSinceManualEmail / 1000 / 60);
+                const minutesIdle = Math.round(idleTimeMs / 1000 / 60);
+                
+                console.log(`⏱️ ${recipient.email} (manual email ${i + 1}): ${minutesSince}m since manual email, idle timeout: ${minutesIdle}m`);
+                
+                if (timeSinceManualEmail >= idleTimeMs) {
+                  emailsToSend.push({
+                    email: recipient.email,
+                    manualEmailIndex: i
+                  });
+                  console.log(`✅ ${recipient.email} (manual email ${i + 1}) will receive idle reminder email (${minutesSince}m >= ${minutesIdle}m)`);
+                }
+              }
+            }
+          }
+
+          if (emailsToSend.length > 0 && idleTrigger.followUpEmail) {
+            console.log(`📧 Sending ${emailsToSend.length} idle reminder emails for campaign: ${campaign.name}`);
+            
+            for (const emailData of emailsToSend) {
+              try {
+                console.log(`📧 Sending idle reminder email to: ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
+                await this.sendSingleEmail(campaign, emailData.email, idleTrigger.followUpEmail);
+                
+                // Mark idle email as sent for this specific manual email
+                const recipient = campaign.recipients.find(r => r.email === emailData.email);
+                if (recipient && recipient.manualEmails[emailData.manualEmailIndex]) {
+                  recipient.manualEmails[emailData.manualEmailIndex].idleEmailSent = true;
+                  console.log(`✅ Idle reminder email sent and marked for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
+                }
+              } catch (error) {
+                console.error(`❌ Failed to send idle reminder email to ${emailData.email}:`, error);
+              }
+            }
+
+            // Update analytics and save campaign
+            campaign.analytics.totalSent += emailsToSend.length;
+            await campaign.save();
+            
+            console.log(`✅ Sent ${emailsToSend.length} idle reminder emails for campaign: ${campaign.name}`);
+          } else if (emailsToSend.length > 0) {
+            console.log(`⚠️ No idle reminder email configured for campaign: ${campaign.name}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking idle time triggers:', error);
     }
   }
 
@@ -351,6 +484,14 @@ class EmailCampaignEngine {
       }
 
       const analytics = {
+        campaign: {
+          _id: campaign._id,
+          name: campaign.name,
+          description: campaign.description,
+          status: campaign.status,
+          timeDelayTrigger: campaign.timeDelayTrigger,
+          behaviorTriggers: campaign.behaviorTriggers
+        },
         totalSent: campaign.analytics.totalSent || 0,
         totalOpens: campaign.analytics.totalOpens || 0,
         totalClicks: campaign.analytics.totalClicks || 0,
@@ -361,9 +502,13 @@ class EmailCampaignEngine {
           lastActivity: recipient.lastActivity,
           manualEmailsCount: recipient.manualEmails ? recipient.manualEmails.length : 0,
           followUpsSent: recipient.manualEmails ? recipient.manualEmails.filter(me => me.timeDelayEmailSent).length : 0,
+          idleEmailsSent: recipient.manualEmails ? recipient.manualEmails.filter(me => me.idleEmailSent).length : 0,
+          emailsWithLinks: recipient.manualEmails ? recipient.manualEmails.filter(me => me.hasLinks).length : 0,
           manualEmails: recipient.manualEmails ? recipient.manualEmails.map(me => ({
             sentAt: me.sentAt,
-            timeDelayEmailSent: me.timeDelayEmailSent
+            timeDelayEmailSent: me.timeDelayEmailSent,
+            idleEmailSent: me.idleEmailSent,
+            hasLinks: me.hasLinks
           })) : []
         }))
       };
@@ -381,11 +526,13 @@ class EmailCampaignEngine {
     
     // Check immediately on startup
     this.checkTimeTriggers();
+    this.checkIdleTimeTriggers();
     
     // Check every 30 seconds for more precise timing
     const intervalId = setInterval(() => {
       console.log('⏰ Scheduled time delay trigger check running...');
       this.checkTimeTriggers();
+      this.checkIdleTimeTriggers();
     }, 30 * 1000); // 30 seconds
     
     // Store the interval ID so we can clear it if needed
@@ -397,6 +544,7 @@ class EmailCampaignEngine {
     setTimeout(() => {
       console.log('🧪 Testing time delay trigger checking (30 seconds after startup)...');
       this.checkTimeTriggers();
+      this.checkIdleTimeTriggers();
     }, 30 * 1000); // Test after 30 seconds
   }
 
@@ -457,12 +605,22 @@ class EmailCampaignEngine {
           if (!recipient.manualEmails) {
             recipient.manualEmails = [];
           }
+          
+          // Check if email template contains links
+          const emailContent = campaign.emailTemplate.body || '';
+          const hasLinks = emailContent.includes('<a href=') || emailContent.includes('http://') || emailContent.includes('https://');
+          
           recipient.manualEmails.push({
             sentAt: new Date(),
-            timeDelayEmailSent: false
+            timeDelayEmailSent: false,
+            idleEmailSent: false,
+            hasLinks: hasLinks
           });
           
           console.log(`📧 Added manual email entry for ${email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
+          if (hasLinks) {
+            console.log(`📧 Email contains links - will be eligible for idle tracking`);
+          }
           
           sentCount++;
           console.log(`✅ Manual email sent successfully to ${email}`);

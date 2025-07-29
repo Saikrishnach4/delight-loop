@@ -111,6 +111,7 @@ class EmailService {
       const trackingBaseUrl = baseUrl || process.env.BASE_URL || 'http://localhost:5000';
       const encodedEmail = encodeURIComponent(userEmail);
       const trackingPixelUrl = `${trackingBaseUrl}/api/campaigns/track/open/${campaignId}/${encodedEmail}`;
+      const clickTrackingUrl = `${trackingBaseUrl}/api/campaigns/track/click/${campaignId}/${encodedEmail}`;
       
       console.log('🔍 ADDING TRACKING TO EMAIL:');
       console.log(`📧 Campaign ID: ${campaignId}`);
@@ -118,12 +119,14 @@ class EmailService {
       console.log(`📧 BASE_URL from env: ${process.env.BASE_URL || 'NOT SET'}`);
       console.log(`📧 Using tracking base URL: ${trackingBaseUrl}`);
       console.log(`📧 Tracking URL: ${trackingPixelUrl}`);
+      console.log(`📧 Click Tracking URL: ${clickTrackingUrl}`);
+      
+      let htmlContent = emailContent;
       
       // Add tracking pixel at the end of the email
       const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
       
       // Add tracking pixel to HTML content
-      let htmlContent = emailContent;
       if (!htmlContent.includes('</body>')) {
         htmlContent += trackingPixel;
         console.log('📧 Added tracking pixel to end of content (no </body> tag)');
@@ -132,18 +135,57 @@ class EmailService {
         console.log('📧 Added tracking pixel before </body> tag');
       }
       
-      // Add click tracking to links (simple version)
-      const clickTrackingUrl = `${trackingBaseUrl}/api/campaigns/track/click/${campaignId}/${encodedEmail}`;
+      // Enhanced click tracking: Replace ALL URLs with recipient-specific tracking
+      // This includes both <a href> tags and plain text URLs
+      
+      // 1. Replace <a href> tags with tracking
       htmlContent = htmlContent.replace(
         /<a\s+href="([^"]+)"/gi,
         (match, url) => {
           const encodedUrl = encodeURIComponent(url);
-          console.log(`📧 Modified link: ${url} -> ${clickTrackingUrl}?url=${encodedUrl}`);
+          console.log(`📧 Modified <a> link: ${url} -> ${clickTrackingUrl}?url=${encodedUrl}`);
           return `<a href="${clickTrackingUrl}?url=${encodedUrl}"`;
         }
       );
       
-      console.log('✅ Tracking added to email content successfully');
+      // 2. Replace manual tracking links (if user pasted them)
+      // Look for patterns like: http://localhost:5000/api/campaigns/track/click/CAMPAIGN_ID/RECIPIENT_EMAIL?url=...
+      const manualTrackingPattern = new RegExp(
+        `${trackingBaseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api/campaigns/track/click/[^/]+/[^?\\s]+\\?url=([^"\\s]+)`,
+        'gi'
+      );
+      
+      htmlContent = htmlContent.replace(manualTrackingPattern, (match, originalUrl) => {
+        const encodedUrl = encodeURIComponent(originalUrl);
+        const newTrackingUrl = `${clickTrackingUrl}?url=${encodedUrl}`;
+        console.log(`📧 Replaced manual tracking link: ${match} -> ${newTrackingUrl}`);
+        return newTrackingUrl;
+      });
+      
+      // 3. Replace plain text URLs (http/https) that are not already in <a> tags
+      // This is more complex - we need to avoid URLs that are already in href attributes
+      const plainUrlPattern = /(?<!["'])(https?:\/\/[^\s<>"']+)(?!["'])/gi;
+      htmlContent = htmlContent.replace(plainUrlPattern, (match, url) => {
+        // Check if this URL is already inside an <a> tag
+        const beforeMatch = htmlContent.substring(0, htmlContent.indexOf(match));
+        const afterMatch = htmlContent.substring(htmlContent.indexOf(match) + match.length);
+        
+        // Simple check: if there's a <a before and </a> after, skip it
+        const lastATag = beforeMatch.lastIndexOf('<a');
+        const nextCloseTag = afterMatch.indexOf('</a>');
+        
+        if (lastATag > -1 && nextCloseTag > -1) {
+          // This URL is likely already in an <a> tag, skip it
+          return match;
+        }
+        
+        const encodedUrl = encodeURIComponent(url);
+        const newTrackingUrl = `${clickTrackingUrl}?url=${encodedUrl}`;
+        console.log(`📧 Modified plain text URL: ${url} -> ${newTrackingUrl}`);
+        return newTrackingUrl;
+      });
+      
+      console.log('✅ Enhanced tracking added to email content successfully');
       return htmlContent;
     } catch (error) {
       console.error('❌ Error adding tracking to email:', error);
