@@ -215,11 +215,37 @@ router.delete('/:id/recipients/:email', auth, async (req, res) => {
 // Get campaign analytics
 router.get('/:id/analytics', auth, async (req, res) => {
   try {
-    const analytics = await emailCampaignEngine.getCampaignAnalytics(req.params.id);
+    const campaign = await EmailCampaign.findById(req.params.id);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    // Calculate additional analytics
+    const totalRecipients = campaign.recipients.length;
+    const activeRecipients = campaign.recipients.filter(r => r.status === 'active').length;
+    const recipientsWithManualEmail = campaign.recipients.filter(r => r.manualEmailSentAt).length;
+    const recipientsWithTimeDelayEmail = campaign.recipients.filter(r => r.timeDelayEmailSent).length;
+
+    const analytics = {
+      ...campaign.analytics,
+      totalRecipients,
+      activeRecipients,
+      recipientsWithManualEmail,
+      recipientsWithTimeDelayEmail,
+      recipients: campaign.recipients.map(r => ({
+        email: r.email,
+        name: r.name,
+        status: r.status,
+        manualEmailSentAt: r.manualEmailSentAt,
+        timeDelayEmailSent: r.timeDelayEmailSent,
+        lastActivity: r.lastActivity
+      }))
+    };
+
     res.json(analytics);
   } catch (error) {
-    console.error('Error fetching analytics:', error);
-    res.status(500).json({ error: 'Failed to fetch analytics' });
+    console.error('Error getting campaign analytics:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -351,6 +377,142 @@ router.get('/test-config/:campaignId', auth, async (req, res) => {
     res.json(config);
   } catch (error) {
     console.error('Error getting campaign config:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test open behavior manually (for debugging)
+router.post('/:id/test-open/:userEmail', auth, async (req, res) => {
+  try {
+    const { id, userEmail } = req.params;
+    const decodedEmail = decodeURIComponent(userEmail);
+    
+    console.log('🧪 MANUAL OPEN TEST:');
+    console.log(`📧 Campaign ID: ${id}`);
+    console.log(`📧 User Email: ${decodedEmail}`);
+    
+    const result = await emailCampaignEngine.handleUserBehavior(id, decodedEmail, 'open');
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      followUpSent: result.followUpSent,
+      behavior: 'open',
+      userEmail: decodedEmail
+    });
+  } catch (error) {
+    console.error('Error testing open behavior:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Automatic tracking endpoints (no authentication required)
+// Track email opens
+router.get('/track/open/:campaignId/:userEmail', async (req, res) => {
+  try {
+    const { campaignId, userEmail } = req.params;
+    const decodedEmail = decodeURIComponent(userEmail);
+    
+    console.log('🔍 OPEN TRACKING CALLED:');
+    console.log(`📧 Campaign ID: ${campaignId}`);
+    console.log(`📧 User Email: ${decodedEmail}`);
+    console.log(`📧 Full URL: ${req.originalUrl}`);
+    
+    // Check if campaign exists and has open behavior trigger
+    const campaign = await EmailCampaign.findById(campaignId);
+    if (!campaign) {
+      console.log(`❌ Campaign ${campaignId} not found`);
+    } else {
+      console.log(`📧 Campaign found: ${campaign.name}`);
+      console.log(`📧 Campaign status: ${campaign.status}`);
+      console.log(`📧 Behavior triggers:`, campaign.behaviorTriggers);
+      
+      const openTrigger = campaign.behaviorTriggers.find(t => t.behavior === 'open' && t.enabled);
+      if (openTrigger) {
+        console.log(`✅ Open behavior trigger found:`, openTrigger);
+        console.log(`📧 Open-up email subject: ${openTrigger.followUpEmail?.subject}`);
+      } else {
+        console.log(`⚠️ No enabled open behavior trigger found`);
+      }
+    }
+    
+    // Automatically trigger open behavior
+    const result = await emailCampaignEngine.handleUserBehavior(campaignId, decodedEmail, 'open');
+    
+    console.log(`📧 Behavior result:`, result);
+    
+    if (result.success) {
+      console.log(`✅ Open behavior processed for ${decodedEmail}`);
+      if (result.followUpSent) {
+        console.log(`📧 Follow-up email sent for open behavior to ${decodedEmail}`);
+      } else {
+        console.log(`⚠️ No follow-up email configured for open behavior`);
+      }
+    } else {
+      console.log(`❌ Open behavior failed: ${result.message}`);
+    }
+    
+    // Return a 1x1 transparent pixel
+    res.set('Content-Type', 'image/png');
+    res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
+    
+  } catch (error) {
+    console.error('❌ Error tracking email open:', error);
+    // Still return the pixel even if there's an error
+    res.set('Content-Type', 'image/png');
+    res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
+  }
+});
+
+// Track email clicks
+router.get('/track/click/:campaignId/:userEmail', async (req, res) => {
+  try {
+    const { campaignId, userEmail } = req.params;
+    const { url } = req.query;
+    const decodedEmail = decodeURIComponent(userEmail);
+    const decodedUrl = url ? decodeURIComponent(url) : '';
+    
+    console.log(`🔗 Email clicked: ${decodedEmail} in campaign ${campaignId}, URL: ${decodedUrl}`);
+    
+    // Automatically trigger click behavior
+    const result = await emailCampaignEngine.handleUserBehavior(campaignId, decodedEmail, 'click');
+    
+    if (result.success) {
+      console.log(`✅ Click behavior processed for ${decodedEmail}`);
+      if (result.followUpSent) {
+        console.log(`📧 Follow-up email sent for click behavior to ${decodedEmail}`);
+      }
+    }
+    
+    // Redirect to the original URL
+    if (decodedUrl) {
+      res.redirect(decodedUrl);
+    } else {
+      res.redirect('/');
+    }
+    
+  } catch (error) {
+    console.error('Error tracking email click:', error);
+    // Redirect to home page if there's an error
+    res.redirect('/');
+  }
+});
+
+// Send manual email to specific recipients
+router.post('/:id/send-to-recipients', auth, async (req, res) => {
+  try {
+    const { recipientEmails } = req.body;
+    
+    if (!recipientEmails || !Array.isArray(recipientEmails) || recipientEmails.length === 0) {
+      return res.status(400).json({ error: 'recipientEmails array is required' });
+    }
+    
+    console.log(`📧 Sending manual email to specific recipients: ${recipientEmails.join(', ')}`);
+    
+    const result = await emailCampaignEngine.sendManualEmailToRecipients(req.params.id, recipientEmails);
+    res.json(result);
+  } catch (error) {
+    console.error('Error sending manual email to specific recipients:', error);
     res.status(500).json({ error: error.message });
   }
 });

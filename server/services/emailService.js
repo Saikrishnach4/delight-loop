@@ -104,6 +104,53 @@ class EmailService {
     }
   }
 
+  // Add tracking to email content
+  addTrackingToEmail(emailContent, campaignId, userEmail, baseUrl = null) {
+    try {
+      // Use environment variable or default to localhost
+      const trackingBaseUrl = baseUrl || process.env.BASE_URL || 'http://localhost:5000';
+      const encodedEmail = encodeURIComponent(userEmail);
+      const trackingPixelUrl = `${trackingBaseUrl}/api/campaigns/track/open/${campaignId}/${encodedEmail}`;
+      
+      console.log('🔍 ADDING TRACKING TO EMAIL:');
+      console.log(`📧 Campaign ID: ${campaignId}`);
+      console.log(`📧 User Email: ${userEmail}`);
+      console.log(`📧 BASE_URL from env: ${process.env.BASE_URL || 'NOT SET'}`);
+      console.log(`📧 Using tracking base URL: ${trackingBaseUrl}`);
+      console.log(`📧 Tracking URL: ${trackingPixelUrl}`);
+      
+      // Add tracking pixel at the end of the email
+      const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
+      
+      // Add tracking pixel to HTML content
+      let htmlContent = emailContent;
+      if (!htmlContent.includes('</body>')) {
+        htmlContent += trackingPixel;
+        console.log('📧 Added tracking pixel to end of content (no </body> tag)');
+      } else {
+        htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`);
+        console.log('📧 Added tracking pixel before </body> tag');
+      }
+      
+      // Add click tracking to links (simple version)
+      const clickTrackingUrl = `${trackingBaseUrl}/api/campaigns/track/click/${campaignId}/${encodedEmail}`;
+      htmlContent = htmlContent.replace(
+        /<a\s+href="([^"]+)"/gi,
+        (match, url) => {
+          const encodedUrl = encodeURIComponent(url);
+          console.log(`📧 Modified link: ${url} -> ${clickTrackingUrl}?url=${encodedUrl}`);
+          return `<a href="${clickTrackingUrl}?url=${encodedUrl}"`;
+        }
+      );
+      
+      console.log('✅ Tracking added to email content successfully');
+      return htmlContent;
+    } catch (error) {
+      console.error('❌ Error adding tracking to email:', error);
+      return emailContent; // Return original content if tracking fails
+    }
+  }
+
   async verifyConnection() {
     try {
       if (!this.transporter) {

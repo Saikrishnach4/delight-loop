@@ -44,8 +44,10 @@ const emailCampaignSchema = new mongoose.Schema({
     email: String,
     name: String,
     lastActivity: Date,
-    manualEmailSentAt: Date, // Track when manual email was sent
-    timeDelayEmailSent: { type: Boolean, default: false }, // Track if time delay email was sent
+    manualEmails: [{
+      sentAt: Date,
+      timeDelayEmailSent: { type: Boolean, default: false }
+    }],
     status: {
       type: String,
       enum: ['active', 'unsubscribed'],

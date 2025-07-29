@@ -10,53 +10,84 @@ class EmailCampaignEngine {
   // Send manual email to all recipients
   async sendManualEmail(campaignId) {
     try {
+      console.log(`📧 Starting manual email send for campaign ${campaignId}`);
+      
       const campaign = await EmailCampaign.findById(campaignId);
       if (!campaign || campaign.status !== 'active') {
         throw new Error('Campaign not found or not active');
       }
 
       const activeRecipients = campaign.recipients.filter(r => r.status === 'active');
+      console.log(`📧 Found ${activeRecipients.length} active recipients`);
+      
+      let sentCount = 0;
       
       for (const recipient of activeRecipients) {
-        await this.sendSingleEmail(campaign, recipient.email, campaign.emailTemplate);
-        
-        // Update recipient's last activity and manual email sent time
-        recipient.lastActivity = new Date();
-        recipient.manualEmailSentAt = new Date(); // Record when manual email was sent
-        recipient.timeDelayEmailSent = false; // Reset time delay email flag for new cycle
+        try {
+          console.log(`📧 Sending manual email to ${recipient.email}`);
+          
+          await this.sendSingleEmail(campaign, recipient.email, campaign.emailTemplate);
+          
+          // Update recipient's last activity
+          recipient.lastActivity = new Date();
+          
+          // Add new manual email entry
+          if (!recipient.manualEmails) {
+            recipient.manualEmails = [];
+          }
+          recipient.manualEmails.push({
+            sentAt: new Date(),
+            timeDelayEmailSent: false
+          });
+          
+          console.log(`📧 Added manual email entry for ${recipient.email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
+          
+          sentCount++;
+          console.log(`✅ Manual email sent successfully to ${recipient.email}`);
+          
+        } catch (error) {
+          console.error(`❌ Failed to send manual email to ${recipient.email}:`, error);
+          // Continue with other recipients even if one fails
+        }
       }
 
       // Update analytics
-      campaign.analytics.totalSent += activeRecipients.length;
+      campaign.analytics.totalSent += sentCount;
       await campaign.save();
 
-      return { sent: activeRecipients.length };
+      console.log(`📧 Manual email send completed. Sent to ${sentCount} recipients`);
+      return { sent: sentCount };
     } catch (error) {
-      console.error('Error sending manual email:', error);
+      console.error('❌ Error sending manual email:', error);
       throw error;
     }
   }
 
-  // Send single email
+  // Send a single email with tracking
   async sendSingleEmail(campaign, recipientEmail, emailTemplate) {
     try {
-      console.log(`Sending email: ${emailTemplate.subject} to ${recipientEmail}`);
+      console.log(`📧 Sending email to ${recipientEmail} for campaign: ${campaign.name}`);
+      
+      // Add tracking to email content
+      const trackedEmailContent = emailService.addTrackingToEmail(
+        emailTemplate.body,
+        campaign._id.toString(),
+        recipientEmail
+      );
       
       const emailData = {
         to: recipientEmail,
-        from: process.env.EMAIL_FROM || 'noreply@yourcompany.com',
         subject: emailTemplate.subject,
-        body: emailTemplate.body
+        body: trackedEmailContent
       };
-
-      // Send email using the email service
+      
       const result = await emailService.sendEmail(emailData);
-      console.log(`Email sent successfully to ${recipientEmail}:`, result.messageId);
-
-      return true;
+      console.log(`✅ Email sent successfully to ${recipientEmail}:`, result.messageId);
+      
+      return result;
     } catch (error) {
-      console.error(`Error sending email to ${recipientEmail}:`, error);
-      return false;
+      console.error(`❌ Error sending email to ${recipientEmail}:`, error);
+      throw error;
     }
   }
 
@@ -162,11 +193,6 @@ class EmailCampaignEngine {
       
       if (activeCampaigns.length === 0) {
         console.log('⚠️ No active campaigns with enabled time delay triggers found');
-        console.log('📧 All campaigns status:', allCampaigns.map(c => ({ 
-          name: c.name, 
-          status: c.status, 
-          timeDelayEnabled: c.timeDelayTrigger?.enabled 
-        })));
         return;
       }
 
@@ -186,53 +212,70 @@ class EmailCampaignEngine {
         
         for (const recipient of campaign.recipients) {
           console.log(`📧 Checking recipient: ${recipient.email}`);
-          console.log(`📧 Recipient status: ${recipient.status}, manualEmailSentAt: ${recipient.manualEmailSentAt}, timeDelayEmailSent: ${recipient.timeDelayEmailSent}`);
           
           if (recipient.status !== 'active') {
             console.log(`⏭️ Skipping ${recipient.email} - not active`);
             continue;
           }
           
-          if (!recipient.manualEmailSentAt) {
-            console.log(`⏭️ Skipping ${recipient.email} - no manual email sent yet`);
+          if (!recipient.manualEmails || recipient.manualEmails.length === 0) {
+            console.log(`⏭️ Skipping ${recipient.email} - no manual emails sent yet`);
             continue;
           }
           
-          if (recipient.timeDelayEmailSent) {
-            console.log(`⏭️ Skipping ${recipient.email} - time delay email already sent`);
-            continue;
-          }
-          
-          const timeSinceManualEmail = Date.now() - recipient.manualEmailSentAt.getTime();
-          const triggerTime = (campaign.timeDelayTrigger.days * 24 * 60 * 60 * 1000) + 
-                             (campaign.timeDelayTrigger.hours * 60 * 60 * 1000) +
-                             (campaign.timeDelayTrigger.minutes * 60 * 1000);
+          // Check each manual email for follow-up
+          for (let i = 0; i < recipient.manualEmails.length; i++) {
+            const manualEmail = recipient.manualEmails[i];
+            
+            if (manualEmail.timeDelayEmailSent) {
+              console.log(`⏭️ Skipping manual email ${i + 1} for ${recipient.email} - follow-up already sent`);
+              continue;
+            }
+            
+            const timeSinceManualEmail = Date.now() - manualEmail.sentAt.getTime();
+            const triggerTime = (campaign.timeDelayTrigger.days * 24 * 60 * 60 * 1000) + 
+                               (campaign.timeDelayTrigger.hours * 60 * 60 * 1000) +
+                               (campaign.timeDelayTrigger.minutes * 60 * 1000);
 
-          const minutesSince = Math.round(timeSinceManualEmail / 1000 / 60);
-          const minutesTrigger = Math.round(triggerTime / 1000 / 60);
-          const minutesRemaining = Math.round((triggerTime - timeSinceManualEmail) / 1000 / 60);
-          const secondsSince = Math.round(timeSinceManualEmail / 1000);
+            const minutesSince = Math.round(timeSinceManualEmail / 1000 / 60);
+            const minutesTrigger = Math.round(triggerTime / 1000 / 60);
+            const minutesRemaining = Math.round((triggerTime - timeSinceManualEmail) / 1000 / 60);
+            const secondsSince = Math.round(timeSinceManualEmail / 1000);
 
-          console.log(`⏱️ ${recipient.email}: ${minutesSince}m ${secondsSince % 60}s since manual email (${recipient.manualEmailSentAt.toLocaleTimeString()}), trigger at ${minutesTrigger}m`);
-          
-          if (timeSinceManualEmail >= triggerTime) {
-            emailsToSend.push(recipient.email);
-            console.log(`✅ ${recipient.email} will receive time delay email (${minutesSince}m ${secondsSince % 60}s >= ${minutesTrigger}m)`);
-          } else {
-            console.log(`⏳ ${recipient.email} - not ready yet (${minutesRemaining}m ${Math.round((triggerTime - timeSinceManualEmail) / 1000) % 60}s remaining, ${minutesSince}m ${secondsSince % 60}s/${minutesTrigger}m)`);
+            console.log(`⏱️ ${recipient.email} (manual email ${i + 1}): ${minutesSince}m ${secondsSince % 60}s since manual email (${manualEmail.sentAt.toLocaleTimeString()}), trigger at ${minutesTrigger}m`);
+            
+            if (timeSinceManualEmail >= triggerTime) {
+              emailsToSend.push({
+                email: recipient.email,
+                manualEmailIndex: i
+              });
+              console.log(`✅ ${recipient.email} (manual email ${i + 1}) will receive time delay email (${minutesSince}m ${secondsSince % 60}s >= ${minutesTrigger}m)`);
+            } else {
+              console.log(`⏳ ${recipient.email} (manual email ${i + 1}) - not ready yet (${minutesRemaining}m ${Math.round((triggerTime - timeSinceManualEmail) / 1000) % 60}s remaining, ${minutesSince}m ${secondsSince % 60}s/${minutesTrigger}m)`);
+            }
           }
         }
 
         if (emailsToSend.length > 0 && campaign.timeDelayTrigger.followUpEmail) {
           console.log(`📧 Sending ${emailsToSend.length} time delay emails for campaign: ${campaign.name}`);
+          console.log(`📧 Recipients to receive follow-up: ${emailsToSend.map(e => `${e.email} (manual email ${e.manualEmailIndex + 1})`).join(', ')}`);
           
-          for (const email of emailsToSend) {
-            await this.sendSingleEmail(campaign, email, campaign.timeDelayTrigger.followUpEmail);
-            
-            // Mark time delay email as sent for this recipient
-            const recipient = campaign.recipients.find(r => r.email === email);
-            if (recipient) {
-              recipient.timeDelayEmailSent = true;
+          for (const emailData of emailsToSend) {
+            try {
+              console.log(`📧 Sending follow-up email to: ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
+              await this.sendSingleEmail(campaign, emailData.email, campaign.timeDelayTrigger.followUpEmail);
+              
+              // Mark time delay email as sent for this specific manual email
+              const recipient = campaign.recipients.find(r => r.email === emailData.email);
+              if (recipient && recipient.manualEmails[emailData.manualEmailIndex]) {
+                recipient.manualEmails[emailData.manualEmailIndex].timeDelayEmailSent = true;
+                console.log(`✅ Time delay email sent and marked for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
+              } else {
+                console.error(`❌ Recipient or manual email not found for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
+              }
+            } catch (error) {
+              console.error(`❌ Failed to send time delay email to ${emailData.email} (manual email ${emailData.manualEmailIndex + 1}):`, error);
+              // Continue with other recipients even if one fails
             }
           }
 
@@ -270,15 +313,14 @@ class EmailCampaignEngine {
         email,
         name,
         lastActivity: new Date(),
-        manualEmailSentAt: null, // Will be set when manual email is sent
-        timeDelayEmailSent: false, // Will be set to true when time delay email is sent
+        manualEmails: [], // Initialize empty array for manual emails
         status: 'active'
       });
 
       await campaign.save();
       return campaign;
     } catch (error) {
-      console.error('Error adding recipient:', error);
+      console.error('❌ Error adding recipient:', error);
       throw error;
     }
   }
@@ -309,20 +351,26 @@ class EmailCampaignEngine {
       }
 
       const analytics = {
-        totalRecipients: campaign.recipients.length,
-        activeRecipients: campaign.recipients.filter(r => r.status === 'active').length,
-        totalSent: campaign.analytics.totalSent,
-        totalOpens: campaign.analytics.totalOpens,
-        totalClicks: campaign.analytics.totalClicks,
-        openRate: campaign.analytics.totalSent > 0 ? 
-          (campaign.analytics.totalOpens / campaign.analytics.totalSent) * 100 : 0,
-        clickRate: campaign.analytics.totalSent > 0 ? 
-          (campaign.analytics.totalClicks / campaign.analytics.totalSent) * 100 : 0
+        totalSent: campaign.analytics.totalSent || 0,
+        totalOpens: campaign.analytics.totalOpens || 0,
+        totalClicks: campaign.analytics.totalClicks || 0,
+        recipients: campaign.recipients.map(recipient => ({
+          email: recipient.email,
+          name: recipient.name,
+          status: recipient.status,
+          lastActivity: recipient.lastActivity,
+          manualEmailsCount: recipient.manualEmails ? recipient.manualEmails.length : 0,
+          followUpsSent: recipient.manualEmails ? recipient.manualEmails.filter(me => me.timeDelayEmailSent).length : 0,
+          manualEmails: recipient.manualEmails ? recipient.manualEmails.map(me => ({
+            sentAt: me.sentAt,
+            timeDelayEmailSent: me.timeDelayEmailSent
+          })) : []
+        }))
       };
 
       return analytics;
     } catch (error) {
-      console.error('Error getting campaign analytics:', error);
+      console.error('❌ Error getting campaign analytics:', error);
       throw error;
     }
   }
@@ -375,6 +423,67 @@ class EmailCampaignEngine {
     }
     
     return result;
+  }
+
+  // Send manual email to specific recipients only
+  async sendManualEmailToRecipients(campaignId, recipientEmails) {
+    try {
+      console.log(`📧 Starting manual email send to specific recipients for campaign ${campaignId}`);
+      console.log(`📧 Recipients: ${recipientEmails.join(', ')}`);
+      
+      const campaign = await EmailCampaign.findById(campaignId);
+      if (!campaign || campaign.status !== 'active') {
+        throw new Error('Campaign not found or not active');
+      }
+
+      let sentCount = 0;
+      
+      for (const email of recipientEmails) {
+        const recipient = campaign.recipients.find(r => r.email === email && r.status === 'active');
+        if (!recipient) {
+          console.log(`⚠️ Recipient ${email} not found or not active`);
+          continue;
+        }
+
+        try {
+          console.log(`📧 Sending manual email to ${email}`);
+          
+          await this.sendSingleEmail(campaign, email, campaign.emailTemplate);
+          
+          // Update recipient's last activity
+          recipient.lastActivity = new Date();
+          
+          // Add new manual email entry
+          if (!recipient.manualEmails) {
+            recipient.manualEmails = [];
+          }
+          recipient.manualEmails.push({
+            sentAt: new Date(),
+            timeDelayEmailSent: false
+          });
+          
+          console.log(`📧 Added manual email entry for ${email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
+          
+          sentCount++;
+          console.log(`✅ Manual email sent successfully to ${email}`);
+          
+        } catch (error) {
+          console.error(`❌ Failed to send manual email to ${email}:`, error);
+          // Continue with other recipients even if one fails
+        }
+      }
+
+      // Update analytics and save campaign immediately after all recipients are processed
+      campaign.analytics.totalSent += sentCount;
+      await campaign.save();
+      console.log(`💾 Campaign saved with updated recipient data`);
+
+      console.log(`📧 Manual email send completed. Sent to ${sentCount} recipients`);
+      return { sent: sentCount };
+    } catch (error) {
+      console.error('❌ Error sending manual email to specific recipients:', error);
+      throw error;
+    }
   }
 }
 

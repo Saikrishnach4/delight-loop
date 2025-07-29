@@ -33,7 +33,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Email as EmailIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  BarChart as BarChartIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -233,9 +234,16 @@ const EmailCampaigns = () => {
       setCampaigns(campaigns.map(c => 
         c._id === campaignId ? { ...c, status: newStatus } : c
       ));
+      
+      // Close the menu after status change
+      handleMenuClose();
     } catch (error) {
       setError(error.message);
     }
+  };
+
+  const handleViewAnalytics = (campaignId) => {
+    navigate(`/campaigns/${campaignId}/analytics`);
   };
 
   const getStatusColor = (status) => {
@@ -331,8 +339,6 @@ const EmailCampaigns = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Campaign Name</TableCell>
-                <TableCell>Trigger</TableCell>
-                <TableCell>Recipients</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Analytics</TableCell>
                 <TableCell>Actions</TableCell>
@@ -347,19 +353,6 @@ const EmailCampaigns = () => {
                       <Typography variant="body2" color="text.secondary">
                         {campaign.description || 'No description'}
                       </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={getTriggerText(campaign)} 
-                      size="small" 
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Box display="flex" alignItems="center">
-                      <PeopleIcon sx={{ mr: 1, fontSize: 16 }} />
-                      {campaign.recipients?.length || 0}
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -552,6 +545,19 @@ const EmailCampaigns = () => {
             Pause
           </MenuItem>
         )}
+        {selectedCampaign?.status === 'paused' && (
+          <MenuItem onClick={() => {
+            handleStatusChange(selectedCampaign._id, 'active');
+            handleMenuClose();
+          }}>
+            <PlayIcon sx={{ mr: 1 }} />
+            Activate
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => handleViewAnalytics(selectedCampaign?._id)}>
+          <BarChartIcon sx={{ mr: 1 }} />
+          Analytics
+        </MenuItem>
         <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
           <DeleteIcon sx={{ mr: 1 }} />
           Delete

@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import DashboardBuilder from './pages/DashboardBuilder';
 import EmailCampaigns from './pages/EmailCampaigns';
 import EmailCampaignBuilder from './pages/EmailCampaignBuilder';
+import CampaignAnalytics from './pages/CampaignAnalytics';
 import Profile from './pages/Profile';
 
 // Components
@@ -37,9 +38,10 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="dashboard/:id" element={<DashboardBuilder />} />
-          <Route path="campaigns" element={<EmailCampaigns />} />
-          <Route path="campaigns/:id" element={<EmailCampaignBuilder />} />
-          <Route path="profile" element={<Profile />} />
+                      <Route path="campaigns" element={<EmailCampaigns />} />
+            <Route path="campaigns/:id" element={<EmailCampaignBuilder />} />
+            <Route path="campaigns/:campaignId/analytics" element={<CampaignAnalytics />} />
+            <Route path="profile" element={<Profile />} />
         </Route>
 
         {/* Catch all route */}
