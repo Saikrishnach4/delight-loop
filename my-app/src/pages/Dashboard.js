@@ -1,119 +1,187 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Button,
+  Grid,
   Card,
   CardContent,
   CardActions,
-  Grid,
+  Button,
+  Chip,
   IconButton,
+  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Chip,
-  Avatar,
-  Tooltip,
+  Fab,
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
+  Edit as EditIcon,
   Share as ShareIcon,
-  Dashboard as DashboardIcon,
   Group as GroupIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { useDashboard } from '../context/DashboardContext';
 
 const Dashboard = () => {
   const [dashboards, setDashboards] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [newDashboard, setNewDashboard] = useState({
     name: '',
-    description: '',
+    description: ''
   });
+  
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { activeUsers, requestCollaborationCount } = useDashboard();
+
+  // Create a map of dashboard ID to active users count
+  const getActiveUsersForDashboard = (dashboardId) => {
+    return activeUsers.filter(user => user.dashboardId === dashboardId).length;
+  };
+
+  // Refresh collaboration counts for all dashboards
+  const refreshCollaborationCounts = () => {
+    dashboards.forEach(dashboard => {
+      requestCollaborationCount(dashboard._id);
+    });
+  };
 
   useEffect(() => {
     fetchDashboards();
   }, []);
 
+  // Refresh collaboration counts when dashboards are loaded
+  useEffect(() => {
+    if (dashboards.length > 0) {
+      // Small delay to ensure socket is ready
+      const timer = setTimeout(() => {
+        refreshCollaborationCounts();
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [dashboards]);
+
   const fetchDashboards = async () => {
     try {
-      console.log('=== FETCHING DASHBOARDS ===');
-      console.log('Making API call to: /api/dashboards');
-      console.log('Current user token available:', !!localStorage.getItem('token'));
-      console.log('Current user object:', user);
-      console.log('Current user ID:', user?.id);
-      
-      const response = await axios.get('/api/dashboards');
-      console.log('API response received:', response);
-      console.log('Response status:', response.status);
-      console.log('Dashboards data:', response.data);
-      console.log('Number of dashboards:', response.data.dashboards?.length || 0);
-      
-      // Debug dashboard ownership
-      if (response.data.dashboards) {
-        response.data.dashboards.forEach((dashboard, index) => {
-          console.log(`Dashboard ${index + 1}:`, {
-            name: dashboard.name,
-            owner: dashboard.owner,
-            ownerType: typeof dashboard.owner,
-            ownerId: dashboard.owner?._id || dashboard.owner,
-            currentUser: user?.id,
-            currentUserType: typeof user?.id,
-            isOwner: (dashboard.owner?._id || dashboard.owner) === user?.id
-          });
-        });
+      setLoading(true);
+      const response = await fetch('/api/dashboards', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDashboards(data.dashboards || []);
+      } else {
+        console.error('Failed to fetch dashboards');
+        toast.error('Failed to load dashboards');
       }
-      
-      setDashboards(response.data.dashboards || []);
-      console.log('=== DASHBOARDS FETCHED SUCCESSFULLY ===');
     } catch (error) {
-      console.error('=== DASHBOARDS FETCH ERROR ===');
       console.error('Error fetching dashboards:', error);
-      console.error('Error message:', error.message);
-      console.error('Error status:', error.response?.status);
-      console.error('Error details:', error.response?.data);
-      console.error('Error config:', error.config);
-      
-      toast.error('Failed to load dashboards');
+      toast.error('Error loading dashboards');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const handleCreateDashboard = async () => {
     try {
-      const response = await axios.post('/api/dashboards', newDashboard);
-      setDashboards(prev => [response.data.dashboard, ...prev]);
-      setOpenDialog(false);
-      setNewDashboard({ name: '', description: '' });
-      toast.success('Dashboard created successfully!');
-      navigate(`/dashboard/${response.data.dashboard._id}`);
+      // Create a default theme for new dashboards
+      const defaultTheme = {
+        name: 'Default Theme',
+        primary: '#1976d2',
+        secondary: '#dc004e',
+        background: '#ffffff',
+        text: '#000000',
+        border: '#e0e0e0',
+        colors: {
+          primary: '#1976d2',
+          secondary: '#dc004e',
+          background: '#ffffff',
+          surface: '#f5f5f5',
+          text: '#000000',
+          border: '#e0e0e0'
+        },
+        typography: {
+          fontFamily: 'Roboto, sans-serif',
+          fontSize: 14,
+          fontWeight: 400,
+          lineHeight: 1.5
+        },
+        spacing: {
+          unit: 8,
+          borderRadius: 4
+        },
+        shadows: {
+          enabled: true,
+          intensity: 1
+        }
+      };
+
+      const dashboardData = {
+        ...newDashboard,
+        theme: defaultTheme
+      };
+
+      const response = await fetch('/api/dashboards', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(dashboardData)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDashboards(prev => [...prev, data.dashboard]);
+        setNewDashboard({ name: '', description: '' });
+        setOpenDialog(false);
+        toast.success('Dashboard created successfully!');
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to create dashboard');
+      }
     } catch (error) {
       console.error('Error creating dashboard:', error);
-      toast.error('Failed to create dashboard');
+      toast.error('Error creating dashboard');
     }
   };
 
   const handleDeleteDashboard = async (dashboardId) => {
-    if (window.confirm('Are you sure you want to delete this dashboard?')) {
-      try {
-        await axios.delete(`/api/dashboards/${dashboardId}`);
+    if (!window.confirm('Are you sure you want to delete this dashboard?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/dashboards/${dashboardId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
         setDashboards(prev => prev.filter(d => d._id !== dashboardId));
         toast.success('Dashboard deleted successfully!');
-      } catch (error) {
-        console.error('Error deleting dashboard:', error);
-        toast.error('Failed to delete dashboard');
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to delete dashboard');
       }
+    } catch (error) {
+      console.error('Error deleting dashboard:', error);
+      toast.error('Error deleting dashboard');
     }
   };
 
@@ -121,87 +189,77 @@ const Dashboard = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <Box sx={{ p: 3 }}>
         <Typography>Loading dashboards...</Typography>
       </Box>
     );
   }
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          My Dashboards
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">My Dashboards</Typography>
+        <Fab
+          color="primary"
           onClick={() => setOpenDialog(true)}
+          sx={{ position: 'fixed', bottom: 16, right: 16 }}
         >
-          Create Dashboard
-        </Button>
+          <AddIcon />
+        </Fab>
       </Box>
 
       {dashboards.length === 0 ? (
-        <Card>
-          <CardContent sx={{ textAlign: 'center', py: 8 }}>
-            <DashboardIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No dashboards yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mb={3}>
-              Create the first dashboard to start collaborating with others
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setOpenDialog(true)}
-              >
-                Create First Dashboard
-              </Button>
-            </Box>
-          </CardContent>
-        </Card>
+        <Box sx={{ textAlign: 'center', py: 8 }}>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No dashboards yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" mb={3}>
+            Create your first dashboard to get started
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setOpenDialog(true)}
+          >
+            Create Dashboard
+          </Button>
+        </Box>
       ) : (
         <Grid container spacing={3}>
           {dashboards.map((dashboard) => (
             <Grid item xs={12} sm={6} md={4} key={dashboard._id}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flexGrow: 1 }}>
-                  <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                    <Typography variant="h6" component="h2" noWrap>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Typography variant="h6" component="h2" sx={{ flex: 1 }}>
                       {dashboard.name}
                     </Typography>
-                    <Box>
-                      <Tooltip title="Edit">
-                        <IconButton
-                          size="small"
-                          onClick={() => navigate(`/dashboard/${dashboard._id}`)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      {/* Only show delete button for dashboard owner */}
+                    <Box sx={{ display: 'flex', gap: 1 }}>
                       {(() => {
-                        const isOwner = (dashboard.owner?._id || dashboard.owner) === user?.id;
-                        console.log(`Delete button check for "${dashboard.name}":`, {
-                          dashboardOwner: dashboard.owner,
-                          dashboardOwnerId: dashboard.owner?._id || dashboard.owner,
-                          currentUser: user?.id,
-                          isOwner: isOwner
-                        });
+                        const isOwner = dashboard.owner?._id === user?._id;
+                        const isCollaborator = dashboard.collaborators?.some(
+                          c => c.user?._id === user?._id
+                        );
+                        
                         return isOwner ? (
-                          <Tooltip title="Delete">
-                            <IconButton
+                          <Tooltip title="You own this dashboard">
+                            <Chip
+                              label="Owner"
                               size="small"
-                              color="error"
-                              onClick={() => handleDeleteDashboard(dashboard._id)}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
+                              color="primary"
+                              variant="outlined"
+                            />
+                          </Tooltip>
+                        ) : isCollaborator ? (
+                          <Tooltip title="You collaborate on this dashboard">
+                            <Chip
+                              label="Collaborator"
+                              size="small"
+                              color="secondary"
+                              variant="outlined"
+                            />
                           </Tooltip>
                         ) : null;
                       })()}
@@ -215,9 +273,10 @@ const Dashboard = () => {
                   <Box display="flex" alignItems="center" gap={1} mb={2}>
                     <Chip
                       icon={<GroupIcon />}
-                      label={`${dashboard.collaborators?.length || 0} collaborators`}
+                      label={`${getActiveUsersForDashboard(dashboard._id)} active users`}
                       size="small"
                       variant="outlined"
+                      color="success"
                     />
                     <Chip
                       label={`${dashboard.widgets?.length || 0} widgets`}

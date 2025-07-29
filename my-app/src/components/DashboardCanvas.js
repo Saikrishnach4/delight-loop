@@ -234,6 +234,11 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
     );
   }
 
+  console.log('=== DASHBOARD CANVAS RENDER ===');
+  console.log('Dashboard theme:', dashboard.theme);
+  console.log('Background color:', dashboard.theme?.background);
+  console.log('Text color:', dashboard.theme?.text);
+
   return (
     <Box 
       sx={{ 

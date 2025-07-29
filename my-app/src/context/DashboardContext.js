@@ -48,6 +48,27 @@ const dashboardReducer = (state, action) => {
           ),
         },
       };
+    case 'UPDATE_DASHBOARD_THEME':
+      console.log('=== REDUCER: UPDATE_DASHBOARD_THEME ===');
+      console.log('Current state:', state);
+      console.log('Action payload:', action.payload);
+      
+      if (!state.currentDashboard) {
+        console.log('No current dashboard, returning state unchanged');
+        return state;
+      }
+      
+      const updatedState = {
+        ...state,
+        currentDashboard: {
+          ...state.currentDashboard,
+          theme: action.payload,
+        },
+      };
+      
+      console.log('Updated state:', updatedState);
+      console.log('=== REDUCER: UPDATE_DASHBOARD_THEME COMPLETE ===');
+      return updatedState;
     case 'ADD_WIDGET':
       if (!state.currentDashboard) return state;
       return {
@@ -137,6 +158,39 @@ export const DashboardProvider = ({ children }) => {
         console.log('=== ACTIVE USERS HANDLED ===');
       });
 
+      socket.on('collaboration-count-updated', (data) => {
+        console.log('=== COLLABORATION COUNT UPDATED ===');
+        console.log('Collaboration count data:', data);
+        console.log('Dashboard ID:', data.dashboardId);
+        console.log('Count:', data.count);
+        console.log('Users:', data.users);
+        
+        // Update active users for the specific dashboard
+        dispatch({ type: 'SET_ACTIVE_USERS', payload: data.users });
+        console.log('=== COLLABORATION COUNT UPDATED HANDLED ===');
+      });
+
+      socket.on('theme-updated', (data) => {
+        console.log('=== THEME UPDATED EVENT ===');
+        console.log('Theme update data:', data);
+        console.log('New theme:', data.theme);
+        console.log('Updated by:', data.user.username);
+        console.log('Current dashboard ID:', state.currentDashboard?._id);
+        console.log('Event dashboard ID:', data.dashboardId);
+        
+        // Update current dashboard theme
+        if (state.currentDashboard && state.currentDashboard._id) {
+          console.log('Dispatching UPDATE_DASHBOARD_THEME from event');
+          dispatch({
+            type: 'UPDATE_DASHBOARD_THEME',
+            payload: data.theme
+          });
+        } else {
+          console.log('Cannot update theme - no current dashboard');
+        }
+        console.log('=== THEME UPDATED EVENT HANDLED ===');
+      });
+
       socket.on('widget-updated', (data) => {
         console.log('Widget updated:', data);
         // Handle real-time widget updates
@@ -206,6 +260,38 @@ export const DashboardProvider = ({ children }) => {
       dispatch({ type: 'SET_ACTIVE_USERS', payload: [] });
       dispatch({ type: 'SET_CHAT_MESSAGES', payload: [] });
     }
+  };
+
+  const requestCollaborationCount = (dashboardId) => {
+    if (state.socket && dashboardId) {
+      console.log('Requesting collaboration count for dashboard:', dashboardId);
+      state.socket.emit('request-collaboration-count', { dashboardId });
+    }
+  };
+
+  const updateTheme = (theme) => {
+    console.log('=== UPDATE THEME CALLED ===');
+    console.log('Theme to update:', theme);
+    console.log('Socket available:', !!state.socket);
+    console.log('Current dashboard:', state.currentDashboard);
+    
+    if (state.socket && state.currentDashboard) {
+      console.log('Emitting theme-update event');
+      state.socket.emit('theme-update', {
+        dashboardId: state.currentDashboard._id,
+        theme
+      });
+    } else {
+      console.log('Cannot emit theme update - missing socket or dashboard');
+    }
+    
+    // Also update locally
+    console.log('Dispatching UPDATE_DASHBOARD_THEME');
+    dispatch({
+      type: 'UPDATE_DASHBOARD_THEME',
+      payload: theme
+    });
+    console.log('=== UPDATE THEME COMPLETE ===');
   };
 
   const updateWidget = (widgetId, updates) => {
@@ -281,6 +367,8 @@ export const DashboardProvider = ({ children }) => {
     updateLayout,
     joinDashboard,
     leaveDashboard,
+    requestCollaborationCount,
+    updateTheme,
   };
 
   return (

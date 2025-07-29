@@ -28,6 +28,7 @@ import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,
   Upload as UploadIcon,
+  Sync as SyncIcon,
 } from '@mui/icons-material';
 import { ChromePicker } from 'react-color';
 
@@ -67,13 +68,20 @@ const getDefaultTheme = () => ({
 });
 
 const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
-  const [theme, setTheme] = useState(currentTheme || getDefaultTheme());
+  const [theme, setTheme] = useState(() => {
+    // Ensure we always have a valid theme structure
+    const defaultTheme = getDefaultTheme();
+    return currentTheme ? { ...defaultTheme, ...currentTheme } : defaultTheme;
+  });
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [activeColorField, setActiveColorField] = useState('');
   const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
-    setTheme(currentTheme || getDefaultTheme());
+    // Ensure we always have a valid theme structure when currentTheme changes
+    const defaultTheme = getDefaultTheme();
+    const newTheme = currentTheme ? { ...defaultTheme, ...currentTheme } : defaultTheme;
+    setTheme(newTheme);
   }, [currentTheme]);
 
   const handleColorChange = (color) => {
@@ -160,7 +168,7 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
         Colors
       </Typography>
       <Grid container spacing={2}>
-        {Object.entries(theme.colors).map(([colorName, colorValue]) => (
+        {Object.entries(theme.colors || {}).map(([colorName, colorValue]) => (
           <Grid item xs={6} sm={4} key={colorName}>
             <Box
               sx={{
@@ -206,7 +214,7 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           <FormControl fullWidth>
             <InputLabel>Font Family</InputLabel>
             <Select
-              value={theme.typography.fontFamily}
+              value={theme.typography?.fontFamily || 'Roboto, sans-serif'}
               label="Font Family"
               onChange={(e) => handleNestedChange('typography', 'fontFamily', e.target.value)}
             >
@@ -219,9 +227,9 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           </FormControl>
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Typography gutterBottom>Font Size: {theme.typography.fontSize}px</Typography>
+          <Typography gutterBottom>Font Size: {theme.typography?.fontSize || 14}px</Typography>
           <Slider
-            value={theme.typography.fontSize}
+            value={theme.typography?.fontSize || 14}
             onChange={(e, value) => handleNestedChange('typography', 'fontSize', value)}
             min={10}
             max={20}
@@ -234,7 +242,7 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           <FormControl fullWidth>
             <InputLabel>Font Weight</InputLabel>
             <Select
-              value={theme.typography.fontWeight}
+              value={theme.typography?.fontWeight || 400}
               label="Font Weight"
               onChange={(e) => handleNestedChange('typography', 'fontWeight', e.target.value)}
             >
@@ -247,9 +255,9 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           </FormControl>
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Typography gutterBottom>Line Height: {theme.typography.lineHeight}</Typography>
+          <Typography gutterBottom>Line Height: {theme.typography?.lineHeight || 1.5}</Typography>
           <Slider
-            value={theme.typography.lineHeight}
+            value={theme.typography?.lineHeight || 1.5}
             onChange={(e, value) => handleNestedChange('typography', 'lineHeight', value)}
             min={1}
             max={2}
@@ -269,9 +277,9 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
       </Typography>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
-          <Typography gutterBottom>Spacing Unit: {theme.spacing.unit}px</Typography>
+          <Typography gutterBottom>Spacing Unit: {theme.spacing?.unit || 8}px</Typography>
           <Slider
-            value={theme.spacing.unit}
+            value={theme.spacing?.unit || 8}
             onChange={(e, value) => handleNestedChange('spacing', 'unit', value)}
             min={4}
             max={16}
@@ -281,9 +289,9 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <Typography gutterBottom>Border Radius: {theme.spacing.borderRadius}px</Typography>
+          <Typography gutterBottom>Border Radius: {theme.spacing?.borderRadius || 4}px</Typography>
           <Slider
-            value={theme.spacing.borderRadius}
+            value={theme.spacing?.borderRadius || 4}
             onChange={(e, value) => handleNestedChange('spacing', 'borderRadius', value)}
             min={0}
             max={16}
@@ -306,18 +314,18 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           <FormControlLabel
             control={
               <Switch
-                checked={theme.shadows.enabled}
+                checked={theme.shadows?.enabled || false}
                 onChange={(e) => handleNestedChange('shadows', 'enabled', e.target.checked)}
               />
             }
             label="Enable Shadows"
           />
         </Grid>
-        {theme.shadows.enabled && (
+        {theme.shadows?.enabled && (
           <Grid item xs={12}>
-            <Typography gutterBottom>Shadow Intensity: {theme.shadows.intensity}</Typography>
+            <Typography gutterBottom>Shadow Intensity: {theme.shadows?.intensity || 1}</Typography>
             <Slider
-              value={theme.shadows.intensity}
+              value={theme.shadows?.intensity || 1}
               onChange={(e, value) => handleNestedChange('shadows', 'intensity', value)}
               min={0}
               max={3}
@@ -346,7 +354,7 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           fontFamily: theme.typography?.fontFamily || 'Roboto, sans-serif',
           fontSize: theme.typography?.fontSize || 14,
           lineHeight: theme.typography?.lineHeight || 1.5,
-          boxShadow: theme.shadows?.enabled ? `0 ${theme.shadows.intensity * 2}px ${theme.shadows.intensity * 4}px rgba(0,0,0,0.1)` : 'none',
+          boxShadow: theme.shadows?.enabled ? `0 ${(theme.shadows?.intensity || 1) * 2}px ${(theme.shadows?.intensity || 1) * 4}px rgba(0,0,0,0.1)` : 'none',
         }}
       >
         <Typography variant="h5" gutterBottom sx={{ color: theme.primary || '#1976d2' }}>
@@ -395,7 +403,17 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">Theme Customizer</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h6">Theme Customizer</Typography>
+          <Tooltip title="Real-time updates enabled">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <SyncIcon sx={{ fontSize: 16, color: 'success.main' }} />
+              <Typography variant="caption" color="success.main">
+                Live
+              </Typography>
+            </Box>
+          </Tooltip>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Tooltip title="Export Theme">
             <IconButton onClick={exportTheme}>
@@ -471,7 +489,7 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
         <DialogTitle>Choose Color</DialogTitle>
         <DialogContent>
           <ChromePicker
-            color={theme.colors[activeColorField]}
+            color={theme.colors?.[activeColorField] || '#000000'}
             onChange={handleColorChange}
           />
         </DialogContent>

@@ -263,7 +263,6 @@ const EmailCampaignBuilder = () => {
             <EmailTemplateEditor
               template={campaign.template}
               onSave={(template) => {
-                // Save template to campaign steps
                 const updatedCampaign = { 
                   ...campaign, 
                   template,
@@ -275,7 +274,6 @@ const EmailCampaignBuilder = () => {
                         subject: template.subject || 'Welcome Email',
                         body: template.content || 'Email content here...',
                         htmlBody: template.content || 'Email content here...',
-                        variables: template.variables || []
                       },
                       triggers: {
                         type: 'immediate',
@@ -415,61 +413,32 @@ const SubscribersPanel = ({ campaign }) => {
 // Analytics Panel Component
 const AnalyticsPanel = ({ campaign }) => {
   const [analytics, setAnalytics] = useState({
-    totalSubscribers: 0,
-    activeSubscribers: 0,
-    totalSent: 0,
-    totalOpens: 0,
-    totalClicks: 0,
-    openRate: 0,
-    clickRate: 0,
-    conversionRate: 0,
-    stepAnalytics: [],
-    recentActivity: [],
-    performanceChart: []
+    totalSubscribers: 1250,
+    activeSubscribers: 1180,
+    totalSent: 1150,
+    totalOpens: 345,
+    totalClicks: 89,
+    openRate: 30.0,
+    clickRate: 7.7,
+    conversionRate: 2.1,
+    stepAnalytics: [
+      { stepNumber: 1, name: 'Welcome Email', sent: 1150, opened: 345, clicked: 89 },
+      { stepNumber: 2, name: 'Follow-up', sent: 345, opened: 120, clicked: 45 },
+      { stepNumber: 3, name: 'Promotion', sent: 120, opened: 45, clicked: 23 }
+    ],
+    recentActivity: [
+      { type: 'open', email: 'user1@example.com', timestamp: new Date(Date.now() - 300000) },
+      { type: 'click', email: 'user2@example.com', timestamp: new Date(Date.now() - 600000) },
+      { type: 'sent', email: 'user3@example.com', timestamp: new Date(Date.now() - 900000) }
+    ],
+    performanceChart: [
+      { date: '2024-01-01', sent: 100, opened: 30, clicked: 8 },
+      { date: '2024-01-02', sent: 150, opened: 45, clicked: 12 },
+      { date: '2024-01-03', sent: 200, opened: 60, clicked: 18 },
+      { date: '2024-01-04', sent: 180, opened: 54, clicked: 15 },
+      { date: '2024-01-05', sent: 220, opened: 66, clicked: 20 }
+    ]
   });
-
-  useEffect(() => {
-    if (campaign?._id) {
-      fetchAnalytics();
-    }
-  }, [campaign?._id]);
-
-  const fetchAnalytics = async () => {
-    try {
-      const response = await axios.get(`/api/campaigns/${campaign._id}/analytics`);
-      setAnalytics(response.data.analytics);
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
-      // Use mock data for demo
-      setAnalytics({
-        totalSubscribers: 1250,
-        activeSubscribers: 1180,
-        totalSent: 1150,
-        totalOpens: 345,
-        totalClicks: 89,
-        openRate: 30.0,
-        clickRate: 7.7,
-        conversionRate: 2.1,
-        stepAnalytics: [
-          { stepNumber: 1, name: 'Welcome Email', sent: 1150, opened: 345, clicked: 89 },
-          { stepNumber: 2, name: 'Follow-up', sent: 345, opened: 120, clicked: 45 },
-          { stepNumber: 3, name: 'Promotion', sent: 120, opened: 45, clicked: 23 }
-        ],
-        recentActivity: [
-          { type: 'open', email: 'user1@example.com', timestamp: new Date(Date.now() - 300000) },
-          { type: 'click', email: 'user2@example.com', timestamp: new Date(Date.now() - 600000) },
-          { type: 'sent', email: 'user3@example.com', timestamp: new Date(Date.now() - 900000) }
-        ],
-        performanceChart: [
-          { date: '2024-01-01', sent: 100, opened: 30, clicked: 8 },
-          { date: '2024-01-02', sent: 150, opened: 45, clicked: 12 },
-          { date: '2024-01-03', sent: 200, opened: 60, clicked: 18 },
-          { date: '2024-01-04', sent: 180, opened: 54, clicked: 15 },
-          { date: '2024-01-05', sent: 220, opened: 66, clicked: 20 }
-        ]
-      });
-    }
-  };
 
   return (
     <Box sx={{ height: '100%', overflow: 'auto' }}>

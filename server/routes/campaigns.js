@@ -95,6 +95,67 @@ router.get('/track/click', async (req, res) => {
   }
 });
 
+// Manual test endpoint for tracking (for testing purposes)
+router.post('/test-tracking', auth, async (req, res) => {
+  try {
+    const { campaignId, email, action } = req.body;
+    
+    const campaign = await EmailCampaign.findById(campaignId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found.' });
+    }
+
+    let subscriber = campaign.subscribers.find(s => s.email === email);
+    if (!subscriber) {
+      // Create subscriber if doesn't exist
+      subscriber = {
+        email: email,
+        firstName: 'Test',
+        lastName: 'User',
+        status: 'active',
+        behavior: { opens: [], clicks: [], purchases: [], lastActivity: new Date() },
+        stepHistory: [],
+        subscribedAt: new Date()
+      };
+      campaign.subscribers.push(subscriber);
+    }
+
+    // Record the action
+    if (action === 'open') {
+      subscriber.behavior.opens.push(new Date());
+      campaign.analytics.totalOpens += 1;
+    } else if (action === 'click') {
+      subscriber.behavior.clicks.push(new Date());
+      campaign.analytics.totalClicks += 1;
+    }
+
+    subscriber.lastActivity = new Date();
+    
+    // Update rates
+    if (campaign.analytics.totalSent > 0) {
+      campaign.analytics.openRate = (campaign.analytics.totalOpens / campaign.analytics.totalSent) * 100;
+    }
+    if (campaign.analytics.totalOpens > 0) {
+      campaign.analytics.clickRate = (campaign.analytics.totalClicks / campaign.analytics.totalOpens) * 100;
+    }
+
+    await campaign.save();
+
+    res.json({
+      message: `${action} recorded successfully`,
+      analytics: campaign.analytics,
+      subscriber: {
+        email: subscriber.email,
+        opens: subscriber.behavior.opens.length,
+        clicks: subscriber.behavior.clicks.length
+      }
+    });
+  } catch (error) {
+    console.error('Test tracking error:', error);
+    res.status(500).json({ error: 'Failed to record test tracking.' });
+  }
+});
+
 // Get all campaigns for current user
 router.get('/', auth, async (req, res) => {
   try {

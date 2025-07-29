@@ -13,12 +13,14 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Chip,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
   Settings as SettingsIcon,
   Palette as PaletteIcon,
+  Group as GroupIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -33,7 +35,12 @@ const DashboardBuilder = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showThemeCustomizer, setShowThemeCustomizer] = useState(false);
-  const { setCurrentDashboard } = useDashboard();
+  const { setCurrentDashboard, activeUsers, requestCollaborationCount, updateTheme } = useDashboard();
+
+  // Get active users for current dashboard
+  const getActiveUsersForCurrentDashboard = () => {
+    return activeUsers.filter(user => user.dashboardId === id).length;
+  };
 
   useEffect(() => {
     console.log('DashboardBuilder useEffect triggered with id:', id);
@@ -41,6 +48,18 @@ const DashboardBuilder = () => {
     console.log('Dashboard ID from URL:', id);
     fetchDashboard();
   }, [id]);
+
+  // Request collaboration count when dashboard loads
+  useEffect(() => {
+    if (id) {
+      // Small delay to ensure socket is ready
+      const timer = setTimeout(() => {
+        requestCollaborationCount(id);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [id, requestCollaborationCount]);
 
   const fetchDashboard = async () => {
     try {
@@ -113,26 +132,62 @@ const DashboardBuilder = () => {
     }
   };
 
-  const handleThemeChange = (newTheme) => {
+  const handleThemeChange = async (newTheme) => {
+    console.log('=== THEME CHANGE ===');
+    console.log('New theme received:', newTheme);
+    console.log('Current dashboard:', dashboard);
+    
     const updatedDashboard = {
       ...dashboard,
       theme: newTheme
     };
+    console.log('Updated dashboard:', updatedDashboard);
+    
     setDashboard(updatedDashboard);
     
-    // Auto-save theme changes
-    handleUpdateDashboard(updatedDashboard);
+    // Use real-time theme update
+    console.log('Calling updateTheme with:', newTheme);
+    updateTheme(newTheme);
+    
+    // Save to database immediately
+    try {
+      console.log('Saving theme to database...');
+      await axios.put(`/api/dashboards/${id}`, updatedDashboard);
+      console.log('Theme saved to database successfully');
+    } catch (error) {
+      console.error('Error saving theme to database:', error);
+      toast.error('Failed to save theme to database');
+    }
+    
+    console.log('=== THEME CHANGE COMPLETE ===');
   };
 
-  const handleThemeSave = (savedTheme) => {
+  const handleThemeSave = async (savedTheme) => {
+    console.log('=== THEME SAVE ===');
+    console.log('Saved theme:', savedTheme);
+    
     const updatedDashboard = {
       ...dashboard,
       theme: savedTheme
     };
     setDashboard(updatedDashboard);
-    handleUpdateDashboard(updatedDashboard);
+    
+    // Use real-time theme update
+    updateTheme(savedTheme);
+    
+    // Save to database
+    try {
+      console.log('Saving theme to database...');
+      await axios.put(`/api/dashboards/${id}`, updatedDashboard);
+      console.log('Theme saved to database successfully');
+      toast.success('Theme saved successfully!');
+    } catch (error) {
+      console.error('Error saving theme to database:', error);
+      toast.error('Failed to save theme to database');
+    }
+    
     setShowThemeCustomizer(false);
-    toast.success('Theme saved successfully!');
+    console.log('=== THEME SAVE COMPLETE ===');
   };
 
   const handleSave = async () => {
@@ -198,6 +253,13 @@ const DashboardBuilder = () => {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Chip
+            icon={<GroupIcon />}
+            label={`${getActiveUsersForCurrentDashboard()} active users`}
+            size="small"
+            color="success"
+            variant="outlined"
+          />
           <Tooltip title="Theme Customizer">
             <IconButton 
               onClick={() => setShowThemeCustomizer(true)}

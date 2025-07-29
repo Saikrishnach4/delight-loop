@@ -33,13 +33,11 @@ import {
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   Group as GroupIcon,
-  Palette as PaletteIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../my-app/src/context/AuthContext';
 import { useDashboard } from '../../../my-app/src/context/DashboardContext';
 import CollaborationPanel from './Collaboration/CollaborationPanel';
-import ThemeCustomizer from './Theming/ThemeCustomizer';
 
 const drawerWidth = 240;
 
@@ -47,8 +45,6 @@ const Layout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [showCollaboration, setShowCollaboration] = useState(false);
-  const [showThemeCustomizer, setShowThemeCustomizer] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -145,13 +141,7 @@ const Layout = () => {
               <GroupIcon />
             </Badge>
           </IconButton>
-          <IconButton
-            color="inherit"
-            onClick={() => setShowThemeCustomizer(true)}
-            sx={{ ml: 1 }}
-          >
-            <PaletteIcon />
-          </IconButton>
+          {/* Removed global theme customizer - use dashboard-specific one instead */}
           <IconButton
             color="inherit"
             onClick={handleProfileMenuOpen}
@@ -254,28 +244,7 @@ const Layout = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Theme Customizer Dialog */}
-      <Dialog
-        open={showThemeCustomizer}
-        onClose={() => setShowThemeCustomizer(false)}
-        maxWidth="lg"
-        fullWidth
-        PaperProps={{
-          sx: { height: '80vh' }
-        }}
-      >
-        <DialogTitle>Theme Customizer</DialogTitle>
-        <DialogContent>
-          <ThemeCustomizer
-            currentTheme={null}
-            onThemeChange={(theme) => console.log('Theme changed:', theme)}
-            onSave={(theme) => {
-              console.log('Theme saved:', theme);
-              setShowThemeCustomizer(false);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+      {/* Removed global theme customizer dialog - use dashboard-specific one instead */}
     </Box>
   );
 };

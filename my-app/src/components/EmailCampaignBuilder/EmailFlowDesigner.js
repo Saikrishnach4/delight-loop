@@ -38,9 +38,6 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
     if (flowData) {
       setNodes(flowData.nodes || []);
       setEdges(flowData.edges || []);
-      if (flowData.nodes && flowData.nodes.length > 0) {
-        toast.success(`Loaded ${flowData.nodes.length} nodes from saved flow`);
-      }
     }
   }, [flowData]);
 
@@ -61,37 +58,6 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
     // Update parent component
     onFlowChange({ nodes: newNodes, edges });
     
-    // If it's an email node, also update campaign steps
-    if (type === 'email') {
-      const emailStep = {
-        stepNumber: newNodes.length,
-        name: `Email Step ${newNodes.length}`,
-        emailTemplate: {
-          subject: newNode.data.config.subject || 'New Email',
-          body: newNode.data.config.content || 'Email content here...',
-          htmlBody: newNode.data.config.content || 'Email content here...',
-          variables: []
-        },
-        triggers: {
-          type: 'immediate',
-          conditions: [],
-          timeDelay: { days: 0, hours: 0, minutes: 0 }
-        },
-        isActive: true
-      };
-      
-      // Update campaign with new step
-      if (campaign) {
-        const updatedCampaign = {
-          ...campaign,
-          steps: [...(campaign.steps || []), emailStep]
-        };
-        // This would need to be handled by the parent component
-        console.log('Campaign updated with new email step:', updatedCampaign);
-      }
-    }
-    
-    // Show success message
     toast.success(`Added ${type} node to the flow`);
   };
 
@@ -101,24 +67,17 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
         return {
           subject: 'New Email',
           content: 'Enter your email content here...',
-          template: 'default',
         };
       case 'trigger':
         return {
-          triggerType: 'behavior',
-          behavior: 'open',
-          conditions: [],
+          triggerType: 'open',
+          delay: 0,
         };
       case 'condition':
         return {
           conditionType: 'time',
-          value: 7,
+          value: 1,
           unit: 'days',
-        };
-      case 'delay':
-        return {
-          delay: 24,
-          unit: 'hours',
         };
       default:
         return {};
@@ -127,7 +86,7 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
 
   const updateNode = (nodeId, updates) => {
     const newNodes = nodes.map((node) =>
-      node.id === nodeId ? { ...node, data: { ...node.data, ...updates } } : node
+      node.id === nodeId ? { ...node, data: { ...node.data, config: { ...node.data.config, ...updates } } } : node
     );
     setNodes(newNodes);
     onFlowChange({ nodes: newNodes, edges });
@@ -144,57 +103,54 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
       nodes: nodes.map((node) => ({
         id: node.id,
         type: node.data.type,
-        name: node.data.label,
-        position: node.position,
         config: node.data.config,
       })),
       edges: edges,
     };
-    
-    // Convert nodes to campaign steps
-    const campaignSteps = nodes.map((node, index) => {
-      if (node.data.type === 'email') {
-        return {
-          stepNumber: index + 1,
-          name: node.data.label,
-          emailTemplate: {
-            subject: node.data.config.subject || 'New Email',
-            body: node.data.config.content || 'Email content here...',
-            htmlBody: node.data.config.content || 'Email content here...',
-            variables: node.data.config.variables || []
-          },
-          triggers: {
-            type: 'immediate',
-            conditions: [],
-            timeDelay: { days: 0, hours: 0, minutes: 0 }
-          },
-          isActive: true
-        };
-      } else {
-        return {
-          stepNumber: index + 1,
-          name: node.data.label,
-          type: node.data.type,
-          config: node.data.config,
-          isActive: true
-        };
-      }
-    });
-    
-    // Save both flow data and campaign steps
-    onSave({
-      ...campaignFlow,
-      steps: campaignSteps
-    });
-    toast.success('Campaign flow saved successfully!');
+
+    // Convert flow to campaign steps
+    const steps = nodes
+      .filter((node) => node.data.type === 'email')
+      .map((node, index) => ({
+        stepNumber: index + 1,
+        name: node.data.config.subject || `Email Step ${index + 1}`,
+        emailTemplate: {
+          subject: node.data.config.subject || 'New Email',
+          body: node.data.config.content || 'Email content here...',
+          htmlBody: node.data.config.content || 'Email content here...',
+        },
+        triggers: {
+          type: 'immediate',
+          conditions: [],
+          timeDelay: { days: 0, hours: 0, minutes: 0 }
+        },
+        isActive: true
+      }));
+
+    const updatedCampaign = {
+      ...campaign,
+      steps: steps,
+      flow: campaignFlow
+    };
+
+    onSave(updatedCampaign);
+    toast.success('Flow saved successfully!');
   };
 
   const handleTest = () => {
     if (nodes.length === 0) {
-      toast.error('Please add at least one node to test the campaign');
+      toast.error('Please add at least one email node to test');
       return;
     }
+
+    const emailNodes = nodes.filter(node => node.data.type === 'email');
+    if (emailNodes.length === 0) {
+      toast.error('Please add at least one email node to test');
+      return;
+    }
+
     onTest({ nodes, edges });
+    toast.success('Test campaign sent!');
   };
 
   return (
@@ -232,13 +188,6 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
               onClick={() => addNode('condition')}
             >
               Add Condition
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => addNode('delay')}
-            >
-              Add Delay
             </Button>
             <Button
               variant="contained"
@@ -284,7 +233,8 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
                     top: node.position.y,
                     width: 150,
                     height: 80,
-                    backgroundColor: 'white',
+                    backgroundColor: node.data.type === 'email' ? '#e3f2fd' : 
+                                   node.data.type === 'trigger' ? '#f3e5f5' : '#fff3e0',
                     border: '2px solid #1976d2',
                     borderRadius: 2,
                     display: 'flex',
@@ -362,14 +312,12 @@ const EmailFlowDesigner = ({ campaign, flowData, onFlowChange, onSave, onTest })
   );
 };
 
-// Node Configuration Component
+// Simplified Node Configuration Component
 const NodeConfiguration = ({ node, onUpdate, onDelete }) => {
-  const [config, setConfig] = useState(node.data.config || {});
+  const config = node.data.config || {};
 
   const handleConfigChange = (field, value) => {
-    const newConfig = { ...config, [field]: value };
-    setConfig(newConfig);
-    onUpdate({ config: newConfig });
+    onUpdate({ [field]: value });
   };
 
   const renderEmailConfig = () => (
@@ -386,26 +334,11 @@ const NodeConfiguration = ({ node, onUpdate, onDelete }) => {
         <TextField
           fullWidth
           multiline
-          rows={6}
+          rows={4}
           label="Email Content"
           value={config.content || ''}
           onChange={(e) => handleConfigChange('content', e.target.value)}
         />
-      </Grid>
-      <Grid item xs={12}>
-        <FormControl fullWidth>
-          <InputLabel>Template</InputLabel>
-          <Select
-            value={config.template || 'default'}
-            label="Template"
-            onChange={(e) => handleConfigChange('template', e.target.value)}
-          >
-            <MenuItem value="default">Default Template</MenuItem>
-            <MenuItem value="welcome">Welcome Template</MenuItem>
-            <MenuItem value="promotional">Promotional Template</MenuItem>
-            <MenuItem value="newsletter">Newsletter Template</MenuItem>
-          </Select>
-        </FormControl>
       </Grid>
     </Grid>
   );
@@ -416,196 +349,54 @@ const NodeConfiguration = ({ node, onUpdate, onDelete }) => {
         <FormControl fullWidth>
           <InputLabel>Trigger Type</InputLabel>
           <Select
-            value={config.triggerType || 'behavior'}
+            value={config.triggerType || 'open'}
             label="Trigger Type"
             onChange={(e) => handleConfigChange('triggerType', e.target.value)}
           >
-            <MenuItem value="behavior">User Behavior</MenuItem>
-            <MenuItem value="time">Time-based</MenuItem>
-            <MenuItem value="event">Custom Event</MenuItem>
+            <MenuItem value="open">Email Open</MenuItem>
+            <MenuItem value="click">Email Click</MenuItem>
+            <MenuItem value="immediate">Immediate</MenuItem>
           </Select>
         </FormControl>
       </Grid>
-      {config.triggerType === 'behavior' && (
-        <>
-          <Grid item xs={12}>
-            <FormControl fullWidth>
-              <InputLabel>Behavior</InputLabel>
-              <Select
-                value={config.behavior || 'open'}
-                label="Behavior"
-                onChange={(e) => handleConfigChange('behavior', e.target.value)}
-              >
-                <MenuItem value="open">Email Open</MenuItem>
-                <MenuItem value="click">Email Click</MenuItem>
-                <MenuItem value="purchase">Purchase</MenuItem>
-                <MenuItem value="idle">Idle (No Activity)</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={6}>
-            <TextField
-              fullWidth
-              type="number"
-              label="Count"
-              value={config.count || 1}
-              onChange={(e) => handleConfigChange('count', parseInt(e.target.value))}
-              helperText="How many times this behavior should occur"
-            />
-          </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
-              <InputLabel>Time Window</InputLabel>
-              <Select
-                value={config.timeWindow || 'anytime'}
-                label="Time Window"
-                onChange={(e) => handleConfigChange('timeWindow', e.target.value)}
-              >
-                <MenuItem value="anytime">Anytime</MenuItem>
-                <MenuItem value="within_1_hour">Within 1 hour</MenuItem>
-                <MenuItem value="within_24_hours">Within 24 hours</MenuItem>
-                <MenuItem value="within_7_days">Within 7 days</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-        </>
-      )}
-      {config.triggerType === 'time' && (
-        <>
-          <Grid item xs={6}>
-            <TextField
-              fullWidth
-              type="number"
-              label="Delay"
-              value={config.delay || 0}
-              onChange={(e) => handleConfigChange('delay', parseInt(e.target.value))}
-            />
-          </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
-              <InputLabel>Unit</InputLabel>
-              <Select
-                value={config.unit || 'days'}
-                label="Unit"
-                onChange={(e) => handleConfigChange('unit', e.target.value)}
-              >
-                <MenuItem value="immediate">Immediate</MenuItem>
-                <MenuItem value="minutes">Minutes</MenuItem>
-                <MenuItem value="hours">Hours</MenuItem>
-                <MenuItem value="days">Days</MenuItem>
-                <MenuItem value="weeks">Weeks</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-        </>
-      )}
+      <Grid item xs={12}>
+        <TextField
+          fullWidth
+          type="number"
+          label="Delay (hours)"
+          value={config.delay || 0}
+          onChange={(e) => handleConfigChange('delay', parseInt(e.target.value))}
+          helperText="How many hours to wait before triggering"
+        />
+      </Grid>
     </Grid>
   );
 
   const renderConditionConfig = () => (
     <Grid container spacing={2}>
-      <Grid item xs={12}>
+      <Grid item xs={6}>
+        <TextField
+          fullWidth
+          type="number"
+          label="Value"
+          value={config.value || 0}
+          onChange={(e) => handleConfigChange('value', parseInt(e.target.value))}
+        />
+      </Grid>
+      <Grid item xs={6}>
         <FormControl fullWidth>
-          <InputLabel>Condition Type</InputLabel>
+          <InputLabel>Unit</InputLabel>
           <Select
-            value={config.conditionType || 'time'}
-            label="Condition Type"
-            onChange={(e) => handleConfigChange('conditionType', e.target.value)}
+            value={config.unit || 'days'}
+            label="Unit"
+            onChange={(e) => handleConfigChange('unit', e.target.value)}
           >
-            <MenuItem value="time">Time-based</MenuItem>
-            <MenuItem value="behavior">Behavior-based</MenuItem>
-            <MenuItem value="custom">Custom Logic</MenuItem>
+            <MenuItem value="immediate">Immediate</MenuItem>
+            <MenuItem value="hours">Hours</MenuItem>
+            <MenuItem value="days">Days</MenuItem>
           </Select>
         </FormControl>
       </Grid>
-      
-      {config.conditionType === 'time' && (
-        <>
-          <Grid item xs={6}>
-            <TextField
-              fullWidth
-              type="number"
-              label="Value"
-              value={config.value || 0}
-              onChange={(e) => handleConfigChange('value', parseInt(e.target.value))}
-            />
-          </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
-              <InputLabel>Unit</InputLabel>
-              <Select
-                value={config.unit || 'days'}
-                label="Unit"
-                onChange={(e) => handleConfigChange('unit', e.target.value)}
-              >
-                <MenuItem value="immediate">Immediate</MenuItem>
-                <MenuItem value="minutes">Minutes</MenuItem>
-                <MenuItem value="hours">Hours</MenuItem>
-                <MenuItem value="days">Days</MenuItem>
-                <MenuItem value="weeks">Weeks</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-        </>
-      )}
-      
-      {config.conditionType === 'behavior' && (
-        <>
-          <Grid item xs={12}>
-            <FormControl fullWidth>
-              <InputLabel>Behavior</InputLabel>
-              <Select
-                value={config.behavior || 'open'}
-                label="Behavior"
-                onChange={(e) => handleConfigChange('behavior', e.target.value)}
-              >
-                <MenuItem value="open">Email Open</MenuItem>
-                <MenuItem value="click">Email Click</MenuItem>
-                <MenuItem value="purchase">Purchase</MenuItem>
-                <MenuItem value="idle">Idle (No Activity)</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={6}>
-            <TextField
-              fullWidth
-              type="number"
-              label="Count"
-              value={config.count || 1}
-              onChange={(e) => handleConfigChange('count', parseInt(e.target.value))}
-            />
-          </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
-              <InputLabel>Operator</InputLabel>
-              <Select
-                value={config.operator || 'equals'}
-                label="Operator"
-                onChange={(e) => handleConfigChange('operator', e.target.value)}
-              >
-                <MenuItem value="equals">Equals</MenuItem>
-                <MenuItem value="greater_than">Greater than</MenuItem>
-                <MenuItem value="less_than">Less than</MenuItem>
-                <MenuItem value="not_equals">Not equals</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-        </>
-      )}
-      
-      {config.conditionType === 'custom' && (
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            multiline
-            rows={3}
-            label="Custom Logic"
-            value={config.customLogic || ''}
-            onChange={(e) => handleConfigChange('customLogic', e.target.value)}
-            helperText="Enter custom JavaScript logic (e.g., user.purchases > 0)"
-          />
-        </Grid>
-      )}
     </Grid>
   );
 
@@ -617,8 +408,6 @@ const NodeConfiguration = ({ node, onUpdate, onDelete }) => {
         return renderTriggerConfig();
       case 'condition':
         return renderConditionConfig();
-      case 'delay':
-        return renderConditionConfig(); // Same as condition for delay
       default:
         return <Typography>No configuration available</Typography>;
     }

@@ -71,10 +71,42 @@ const dashboardSchema = new mongoose.Schema({
   },
   widgets: [widgetSchema],
   theme: {
+    // Basic theme properties
     primary: { type: String, default: '#1976d2' },
     secondary: { type: String, default: '#dc004e' },
     background: { type: String, default: '#ffffff' },
-    text: { type: String, default: '#000000' }
+    text: { type: String, default: '#000000' },
+    border: { type: String, default: '#e0e0e0' },
+    
+    // Extended theme structure
+    colors: {
+      primary: { type: String, default: '#1976d2' },
+      secondary: { type: String, default: '#dc004e' },
+      background: { type: String, default: '#ffffff' },
+      surface: { type: String, default: '#f5f5f5' },
+      text: { type: String, default: '#000000' },
+      border: { type: String, default: '#e0e0e0' }
+    },
+    
+    typography: {
+      fontFamily: { type: String, default: 'Roboto, sans-serif' },
+      fontSize: { type: Number, default: 14 },
+      fontWeight: { type: Number, default: 400 },
+      lineHeight: { type: Number, default: 1.5 }
+    },
+    
+    spacing: {
+      unit: { type: Number, default: 8 },
+      borderRadius: { type: Number, default: 4 }
+    },
+    
+    shadows: {
+      enabled: { type: Boolean, default: true },
+      intensity: { type: Number, default: 1 }
+    },
+    
+    // Theme metadata
+    name: { type: String, default: 'Default Theme' }
   },
   settings: {
     isPublic: { type: Boolean, default: false },

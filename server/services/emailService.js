@@ -38,7 +38,7 @@ class EmailService {
       const textBody = this.replaceVariables(step.emailTemplate.body, subscriber);
 
       // Add tracking pixel for email opens
-      const trackingPixel = `<img src="${process.env.CLIENT_URL}/api/campaigns/track/open?email=${subscriber.email}&campaignId=${campaign._id}&stepNumber=${step.stepNumber}" width="1" height="1" style="display:none;" />`;
+      const trackingPixel = `<img src="${process.env.CLIENT_URL || 'http://localhost:5000'}/api/campaigns/track/open?email=${encodeURIComponent(subscriber.email)}&campaignId=${campaign._id}&stepNumber=${step.stepNumber}" width="1" height="1" style="display:none;" />`;
       htmlBody += trackingPixel;
 
       // Wrap links with tracking URLs
@@ -66,8 +66,8 @@ class EmailService {
       .replace(/\{\{user\.email\}\}/g, subscriber.email)
       .replace(/\{\{user\.company\}\}/g, subscriber.customFields?.company || '')
       .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
-      .replace(/\{\{unsubscribe\.url\}\}/g, `${process.env.CLIENT_URL}/unsubscribe?email=${subscriber.email}`)
-      .replace(/\{\{tracking\.url\}\}/g, `${process.env.CLIENT_URL}/track?email=${subscriber.email}`);
+      .replace(/\{\{unsubscribe\.url\}\}/g, `${process.env.CLIENT_URL || 'http://localhost:5000'}/unsubscribe?email=${subscriber.email}`)
+      .replace(/\{\{tracking\.url\}\}/g, `${process.env.CLIENT_URL || 'http://localhost:5000'}/track?email=${subscriber.email}`);
   }
 
   wrapLinksWithTracking(htmlContent, email, campaignId, stepNumber) {
@@ -75,7 +75,7 @@ class EmailService {
     return htmlContent.replace(
       /<a\s+href=["']([^"']+)["']([^>]*)>/gi,
       (match, url, attributes) => {
-        const trackingUrl = `${process.env.CLIENT_URL}/api/campaigns/track/click?email=${email}&campaignId=${campaignId}&stepNumber=${stepNumber}&url=${encodeURIComponent(url)}`;
+        const trackingUrl = `${process.env.CLIENT_URL || 'http://localhost:5000'}/api/campaigns/track/click?email=${encodeURIComponent(email)}&campaignId=${campaignId}&stepNumber=${stepNumber}&url=${encodeURIComponent(url)}`;
         return `<a href="${trackingUrl}"${attributes}>`;
       }
     );

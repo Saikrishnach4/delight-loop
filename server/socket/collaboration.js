@@ -10,6 +10,28 @@ module.exports = (io) => {
   // Store chat messages for each dashboard (in memory for now)
   const dashboardChats = new Map();
 
+  // Function to broadcast collaboration count updates
+  const broadcastCollaborationCount = (dashboardId) => {
+    const roomUsers = Array.from(activeUsers.values())
+      .filter(user => user.dashboardId === dashboardId);
+    
+    const count = roomUsers.length;
+    
+    // Broadcast to all users in the dashboard room
+    io.to(dashboardId).emit('collaboration-count-updated', {
+      dashboardId,
+      count,
+      users: roomUsers.map(user => ({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar
+      }))
+    });
+    
+    console.log(`Broadcasted collaboration count for dashboard ${dashboardId}: ${count} users`);
+  };
+
   // Authentication middleware for Socket.IO
   io.use(async (socket, next) => {
     try {
@@ -97,6 +119,9 @@ module.exports = (io) => {
           .filter(user => user.dashboardId === dashboardId);
         
         socket.emit('active-users', roomUsers);
+
+        // Broadcast updated collaboration count to all users
+        broadcastCollaborationCount(dashboardId);
 
         console.log(`${socket.user.username} joined dashboard ${dashboardId}`);
       } catch (error) {
@@ -278,11 +303,13 @@ module.exports = (io) => {
     socket.on('disconnect', () => {
       console.log(`User disconnected: ${socket.user.username}`);
 
+      // Get dashboard ID before removing user
+      const dashboardId = userRooms.get(socket.user._id);
+
       // Remove from active users
       activeUsers.delete(socket.user._id);
 
       // Notify others in the room
-      const dashboardId = userRooms.get(socket.user._id);
       if (dashboardId) {
         socket.to(dashboardId).emit('user-left', {
           user: {
@@ -293,6 +320,59 @@ module.exports = (io) => {
         });
 
         userRooms.delete(socket.user._id);
+
+        // Broadcast updated collaboration count to all users
+        broadcastCollaborationCount(dashboardId);
+      }
+    });
+
+    // Handle collaboration count requests
+    socket.on('request-collaboration-count', (data) => {
+      try {
+        const { dashboardId } = data;
+        console.log(`Collaboration count requested for dashboard ${dashboardId} by ${socket.user.username}`);
+        broadcastCollaborationCount(dashboardId);
+      } catch (error) {
+        console.error('Request collaboration count error:', error);
+        socket.emit('error', { message: 'Failed to get collaboration count' });
+      }
+    });
+
+    // Handle theme updates
+    socket.on('theme-update', async (data) => {
+      try {
+        const { dashboardId, theme } = data;
+        console.log(`Theme update received from ${socket.user.username} for dashboard ${dashboardId}`);
+
+        // Allow ANY user to edit ANY dashboard (public system)
+        const dashboard = await Dashboard.findOne({
+          _id: dashboardId,
+          isActive: true
+        });
+
+        if (!dashboard) {
+          socket.emit('error', { message: 'Dashboard not found' });
+          return;
+        }
+
+        // Update dashboard theme in database
+        dashboard.theme = theme;
+        await dashboard.save();
+
+        // Broadcast theme update to other users in the room
+        socket.to(dashboardId).emit('theme-updated', {
+          theme,
+          user: {
+            id: socket.user._id,
+            username: socket.user.username
+          },
+          timestamp: new Date()
+        });
+
+        console.log(`Theme updated by ${socket.user.username} for dashboard ${dashboardId}`);
+      } catch (error) {
+        console.error('Theme update error:', error);
+        socket.emit('error', { message: 'Failed to update theme' });
       }
     });
 
