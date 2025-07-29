@@ -2,97 +2,121 @@ const nodemailer = require('nodemailer');
 
 class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    this.transporter = null;
+    this.initializeTransporter();
   }
 
-  async sendEmail(to, subject, html, text) {
+  initializeTransporter() {
     try {
+      console.log('🔧 Initializing email transporter...');
+      console.log('📧 Email config check:', {
+        EMAIL_SERVICE: process.env.EMAIL_SERVICE,
+        EMAIL_USER: process.env.EMAIL_USER ? 'SET' : 'NOT SET',
+        EMAIL_PASS: process.env.EMAIL_PASS ? 'SET' : 'NOT SET',
+        EMAIL_FROM: process.env.EMAIL_FROM
+      });
+
+      // Check if required email configuration exists
+      if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        console.error('❌ Email configuration missing: EMAIL_USER and EMAIL_PASS are required');
+        console.error('Current env vars:', {
+          EMAIL_USER: process.env.EMAIL_USER,
+          EMAIL_PASS: process.env.EMAIL_PASS ? '***' : 'NOT SET'
+        });
+        return;
+      }
+
+      // Determine email service configuration
+      let emailConfig = {};
+
+      // If EMAIL_SERVICE is set to gmail, use Gmail configuration
+      if (process.env.EMAIL_SERVICE === 'gmail') {
+        console.log('📧 Using Gmail service configuration');
+        emailConfig = {
+          service: 'gmail',
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+          }
+        };
+      } else {
+        console.log('📧 Using custom SMTP configuration');
+        // Use custom SMTP configuration
+        emailConfig = {
+          host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+          port: process.env.EMAIL_PORT || 587,
+          secure: false,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+          }
+        };
+      }
+
+      console.log('📧 Creating transporter with config:', {
+        service: emailConfig.service || 'custom smtp',
+        host: emailConfig.host,
+        port: emailConfig.port,
+        user: emailConfig.auth.user
+      });
+
+      // Create transporter using the correct method
+      this.transporter = nodemailer.createTransport(emailConfig);
+
+      console.log('✅ Email transporter initialized successfully');
+    } catch (error) {
+      console.error('❌ Error initializing email transporter:', error);
+      this.transporter = null;
+    }
+  }
+
+  async sendEmail(emailData) {
+    try {
+      if (!this.transporter) {
+        console.error('❌ Transporter is null - checking initialization...');
+        this.initializeTransporter(); // Try to initialize again
+        
+        if (!this.transporter) {
+          throw new Error('Email transporter not initialized - check your EMAIL_USER and EMAIL_PASS configuration');
+        }
+      }
+
       const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to,
-        subject,
-        html,
-        text,
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        to: emailData.to,
+        subject: emailData.subject,
+        text: emailData.body,
+        html: emailData.body // You can also send HTML emails
       };
+
+      console.log('📧 Sending email with options:', {
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject
+      });
 
       const result = await this.transporter.sendMail(mailOptions);
-      console.log('Email sent successfully:', result.messageId);
-      return { success: true, messageId: result.messageId };
-    } catch (error) {
-      console.error('Email sending failed:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async sendCampaignEmail(campaign, subscriber, step) {
-    try {
-      // Replace variables in email content
-      const subject = this.replaceVariables(step.emailTemplate.subject, subscriber);
-      let htmlBody = this.replaceVariables(step.emailTemplate.htmlBody, subscriber);
-      const textBody = this.replaceVariables(step.emailTemplate.body, subscriber);
-
-      // Add tracking pixel for email opens
-      const trackingPixel = `<img src="${process.env.CLIENT_URL || 'http://localhost:5000'}/api/campaigns/track/open?email=${encodeURIComponent(subscriber.email)}&campaignId=${campaign._id}&stepNumber=${step.stepNumber}" width="1" height="1" style="display:none;" />`;
-      htmlBody += trackingPixel;
-
-      // Wrap links with tracking URLs
-      htmlBody = this.wrapLinksWithTracking(htmlBody, subscriber.email, campaign._id, step.stepNumber);
-
-      const result = await this.sendEmail(
-        subscriber.email,
-        subject,
-        htmlBody,
-        textBody
-      );
-
+      console.log('✅ Email sent successfully:', result.messageId);
       return result;
     } catch (error) {
-      console.error('Campaign email sending failed:', error);
-      return { success: false, error: error.message };
+      console.error('❌ Error sending email:', error);
+      throw error;
     }
   }
 
-  replaceVariables(content, subscriber) {
-    if (!content) return '';
-
-    return content
-      .replace(/\{\{user\.name\}\}/g, subscriber.firstName || 'User')
-      .replace(/\{\{user\.email\}\}/g, subscriber.email)
-      .replace(/\{\{user\.company\}\}/g, subscriber.customFields?.company || '')
-      .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
-      .replace(/\{\{unsubscribe\.url\}\}/g, `${process.env.CLIENT_URL || 'http://localhost:5000'}/unsubscribe?email=${subscriber.email}`)
-      .replace(/\{\{tracking\.url\}\}/g, `${process.env.CLIENT_URL || 'http://localhost:5000'}/track?email=${subscriber.email}`);
-  }
-
-  wrapLinksWithTracking(htmlContent, email, campaignId, stepNumber) {
-    // Simple regex to find and wrap links with tracking
-    return htmlContent.replace(
-      /<a\s+href=["']([^"']+)["']([^>]*)>/gi,
-      (match, url, attributes) => {
-        const trackingUrl = `${process.env.CLIENT_URL || 'http://localhost:5000'}/api/campaigns/track/click?email=${encodeURIComponent(email)}&campaignId=${campaignId}&stepNumber=${stepNumber}&url=${encodeURIComponent(url)}`;
-        return `<a href="${trackingUrl}"${attributes}>`;
-      }
-    );
-  }
-
-  async sendTestEmail(to, campaign, step) {
+  async verifyConnection() {
     try {
-      const testSubscriber = {
-        email: to,
-        firstName: 'Test',
-        customFields: { company: 'Test Company' }
-      };
-
-      return await this.sendCampaignEmail(campaign, testSubscriber, step);
+      if (!this.transporter) {
+        console.log('❌ Email transporter not initialized');
+        return false;
+      }
+      
+      await this.transporter.verify();
+      console.log('✅ Email connection verified successfully');
+      return true;
     } catch (error) {
-      console.error('Test email sending failed:', error);
-      return { success: false, error: error.message };
+      console.error('❌ Email connection verification failed:', error);
+      return false;
     }
   }
 }

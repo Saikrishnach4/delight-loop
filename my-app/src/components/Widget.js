@@ -24,7 +24,6 @@ import ChartWidget from './widgets/ChartWidget';
 import TableWidget from './widgets/TableWidget';
 import MetricWidget from './widgets/MetricWidget';
 import TextWidget from './widgets/TextWidget';
-import EmailCampaignWidget from './widgets/EmailCampaignWidget';
 import ImageWidget from './widgets/ImageWidget';
 import WidgetConfigModal from './WidgetConfigModal';
 
@@ -85,8 +84,6 @@ const Widget = ({ widget, theme, onSelect, onUpdate, onDelete, isSelected }) => 
         return <MetricWidget widget={widget} onUpdate={onUpdate} />;
       case 'text':
         return <TextWidget widget={widget} onUpdate={onUpdate} />;
-      case 'email-campaign':
-        return <EmailCampaignWidget widget={widget} onUpdate={onUpdate} />;
       case 'image':
         return <ImageWidget widget={widget} onUpdate={onUpdate} />;
       default:

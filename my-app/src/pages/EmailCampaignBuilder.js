@@ -3,574 +3,694 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Paper,
   Button,
-  Tabs,
-  Tab,
-  IconButton,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Paper,
+  Grid,
   TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Grid,
   Chip,
   Alert,
+  CircularProgress,
+  Divider,
+  Card,
+  CardContent,
+  IconButton,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TableRow,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
+  TableRow
 } from '@mui/material';
 import {
-  ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   PlayArrow as PlayIcon,
-  Settings as SettingsIcon,
-  Analytics as AnalyticsIcon,
-  People as PeopleIcon,
-  OpenInNew as OpenInNewIcon,
-  Mouse as MouseIcon,
-  Send as SendIcon,
+  Pause as PauseIcon,
+  ArrowBack as ArrowBackIcon,
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Email as EmailIcon
 } from '@mui/icons-material';
-import axios from 'axios';
-import toast from 'react-hot-toast';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import EmailFlowDesigner from '../components/EmailCampaignBuilder/EmailFlowDesigner';
-import EmailTemplateEditor from '../components/EmailCampaignBuilder/EmailTemplateEditor';
-import ABTestingPanel from '../components/EmailCampaignBuilder/ABTestingPanel';
+import { useAuth } from '../context/AuthContext';
 
 const EmailCampaignBuilder = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(0);
+  const { user } = useAuth();
+  
   const [campaign, setCampaign] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [flowData, setFlowData] = useState({ nodes: [], edges: [] });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [newRecipient, setNewRecipient] = useState({ email: '', name: '' });
 
   useEffect(() => {
-    fetchCampaign();
-  }, [id]);
+    if (id === 'new') {
+      setCampaign({
+        name: 'New Campaign',
+        description: '',
+        status: 'draft',
+        emailTemplate: {
+          subject: '',
+          body: '',
+          senderName: user?.username || ''
+        },
+        timeDelayTrigger: { enabled: false },
+        behaviorTriggers: []
+      });
+      setLoading(false);
+    } else {
+      fetchCampaign();
+    }
+  }, [id, user]);
 
   const fetchCampaign = async () => {
     try {
-      if (id === 'new') {
-        setCampaign({
-          id: 'new',
-          name: 'New Email Campaign',
-          description: '',
-          type: 'automated',
-          status: 'draft',
-          steps: [],
-          subscribers: [],
-          settings: {},
-          analytics: {},
-        });
-      } else {
-        const response = await axios.get(`/api/campaigns/${id}`);
-        setCampaign(response.data.campaign);
+      setLoading(true);
+      const response = await fetch(`/api/campaigns/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch campaign');
       }
+
+      const data = await response.json();
+      setCampaign(data);
     } catch (error) {
-      console.error('Error fetching campaign:', error);
-      toast.error('Failed to load campaign');
-      navigate('/campaigns');
+      setError(error.message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleSave = async (campaignData = null) => {
-    setIsSaving(true);
+  const handleSave = async () => {
     try {
-      const dataToSave = campaignData || campaign;
-      
-      // Ensure required fields are present
-      const campaignPayload = {
-        name: dataToSave.name || 'New Email Campaign',
-        description: dataToSave.description || '',
-        type: dataToSave.type || 'automated',
-        status: dataToSave.status || 'draft',
-        steps: dataToSave.steps || [],
-        settings: dataToSave.settings || {},
-      };
+      setSaving(true);
+      const method = id === 'new' ? 'POST' : 'PUT';
+      const url = id === 'new' ? '/api/campaigns' : `/api/campaigns/${id}`;
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(campaign)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save campaign');
+      }
+
+      const savedCampaign = await response.json();
       
       if (id === 'new') {
-        const response = await axios.post('/api/campaigns', campaignPayload);
-        setCampaign(response.data.campaign);
-        navigate(`/campaigns/${response.data.campaign._id}`);
-        toast.success('Campaign created successfully!');
+        navigate(`/campaigns/${savedCampaign._id}`);
       } else {
-        await axios.put(`/api/campaigns/${id}`, campaignPayload);
-        toast.success('Campaign saved successfully!');
+        setCampaign(savedCampaign);
       }
     } catch (error) {
-      console.error('Error saving campaign:', error);
-      toast.error('Failed to save campaign');
+      setError(error.message);
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
 
-  const handleTest = async (flowData) => {
+  const handleStatusChange = async (newStatus) => {
     try {
-      if (id === 'new') {
-        // For new campaigns, just show a success message
-        toast.success('Test campaign would be sent! (Campaign needs to be saved first)');
-        return;
+      const response = await fetch(`/api/campaigns/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update campaign status');
       }
-      
-      const response = await axios.post(`/api/campaigns/${id}/test`, flowData);
-      
-      if (response.data.message.includes('email service not configured')) {
-        toast.success('Test campaign simulation successful! (Email service not configured)');
-        console.log('Test campaign data:', response.data.testData);
-      } else {
-        toast.success('Test campaign sent successfully!');
-      }
+
+      setCampaign({ ...campaign, status: newStatus });
     } catch (error) {
-      console.error('Error testing campaign:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to send test campaign';
-      toast.error(errorMessage);
+      setError(error.message);
     }
   };
 
-  const handleBack = () => {
-    navigate('/campaigns');
+  const handleSendEmail = async () => {
+    try {
+      const response = await fetch(`/api/campaigns/${id}/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ recipientEmails: [] }) // Send to all recipients
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send email');
+      }
+
+      const result = await response.json();
+      alert(`Email sent to ${result.sent} recipients`);
+    } catch (error) {
+      setError(error.message);
+    }
   };
 
-  const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
+  const handleAddRecipient = async () => {
+    if (!newRecipient.email.trim()) return;
+
+    try {
+      const response = await fetch(`/api/campaigns/${id}/recipients`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(newRecipient)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add recipient');
+      }
+
+      const updatedCampaign = await response.json();
+      setCampaign(updatedCampaign);
+      setNewRecipient({ email: '', name: '' });
+    } catch (error) {
+      setError(error.message);
+    }
   };
 
-  if (isLoading) {
+  const handleRemoveRecipient = async (email) => {
+    try {
+      const response = await fetch(`/api/campaigns/${id}/recipients/${encodeURIComponent(email)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to remove recipient');
+      }
+
+      const updatedCampaign = await response.json();
+      setCampaign(updatedCampaign);
+    } catch (error) {
+      setError(error.message);
+    }
+  };
+
+  if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <Typography>Loading campaign...</Typography>
+        <CircularProgress />
       </Box>
     );
   }
 
   if (!campaign) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <Typography>Campaign not found</Typography>
+      <Box p={3}>
+        <Alert severity="error">Campaign not found</Alert>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ p: 3 }}>
       {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          p: 2,
-          backgroundColor: 'background.paper',
-          borderBottom: '1px solid #e0e0e0',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Tooltip title="Back to Campaigns">
-            <IconButton onClick={handleBack} sx={{ mr: 2 }}>
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Grid container alignItems="center" spacing={2}>
+          <Grid item>
+            <IconButton onClick={() => navigate('/campaigns')}>
               <ArrowBackIcon />
             </IconButton>
-          </Tooltip>
-          <Box>
-            <Typography variant="h5" component="h1">
-              {campaign.name}
-            </Typography>
+          </Grid>
+          <Grid item xs>
+            <Typography variant="h5">{campaign.name}</Typography>
             <Typography variant="body2" color="text.secondary">
               {campaign.description || 'No description'}
             </Typography>
-          </Box>
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip
-            label={campaign.status}
-            color={campaign.status === 'active' ? 'success' : 'default'}
-            size="small"
-          />
-          <Tooltip title="Campaign Settings">
-            <IconButton onClick={() => setShowSettings(true)}>
-              <SettingsIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Campaign Analytics">
-            <IconButton onClick={() => setShowAnalytics(true)}>
-              <AnalyticsIcon />
-            </IconButton>
-          </Tooltip>
-          <Button
-            variant="contained"
-            startIcon={<SaveIcon />}
-            onClick={() => handleSave()}
-            disabled={isSaving}
-          >
-            {isSaving ? 'Saving...' : 'Save Campaign'}
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Campaign Builder Content */}
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={activeTab} onChange={handleTabChange}>
-            <Tab label="Flow Designer" />
-            <Tab label="Template Editor" />
-            <Tab label="A/B Testing" />
-            <Tab label="Subscribers" />
-            <Tab label="Analytics" />
-          </Tabs>
-        </Box>
-
-        <Box sx={{ p: 2, height: 'calc(100% - 48px)', overflow: 'auto' }}>
-          {activeTab === 0 && (
-            <EmailFlowDesigner
-              campaign={campaign}
-              flowData={flowData}
-              onFlowChange={setFlowData}
-              onSave={handleSave}
-              onTest={handleTest}
+          </Grid>
+          <Grid item>
+            <Chip 
+              label={campaign.status} 
+              color={campaign.status === 'active' ? 'success' : 'default'}
+              sx={{ mr: 2 }}
             />
-          )}
-          
-          {activeTab === 1 && (
-            <EmailTemplateEditor
-              template={campaign.template}
-              onSave={(template) => {
-                const updatedCampaign = { 
-                  ...campaign, 
-                  template,
-                  steps: [
-                    {
-                      stepNumber: 1,
-                      name: 'Email Template',
-                      emailTemplate: {
-                        subject: template.subject || 'Welcome Email',
-                        body: template.content || 'Email content here...',
-                        htmlBody: template.content || 'Email content here...',
-                      },
-                      triggers: {
-                        type: 'immediate',
-                        conditions: [],
-                        timeDelay: { days: 0, hours: 0, minutes: 0 }
-                      },
-                      isActive: true
-                    }
-                  ]
-                };
-                setCampaign(updatedCampaign);
-                handleSave(updatedCampaign);
-              }}
-              onPreview={(template) => {
-                console.log('Preview template:', template);
-              }}
-            />
-          )}
-          
-          {activeTab === 2 && (
-            <ABTestingPanel campaign={campaign} onSave={handleSave} />
-          )}
-          
-          {activeTab === 3 && (
-            <SubscribersPanel campaign={campaign} />
-          )}
-          
-          {activeTab === 4 && (
-            <AnalyticsPanel campaign={campaign} />
-          )}
-        </Box>
-      </Box>
+            {campaign.status === 'draft' ? (
+              <Button
+                variant="contained"
+                startIcon={<PlayIcon />}
+                onClick={() => handleStatusChange('active')}
+                sx={{ mr: 1 }}
+              >
+                Activate
+              </Button>
+            ) : campaign.status === 'active' ? (
+              <Button
+                variant="outlined"
+                startIcon={<PauseIcon />}
+                onClick={() => handleStatusChange('paused')}
+                sx={{ mr: 1 }}
+              >
+                Pause
+              </Button>
+            ) : null}
+            <Button
+              variant="contained"
+              startIcon={<SaveIcon />}
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? <CircularProgress size={20} /> : 'Save'}
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
 
-      {/* Settings Dialog */}
-      <Dialog
-        open={showSettings}
-        onClose={() => setShowSettings(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Campaign Settings</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      <Grid container spacing={3}>
+        {/* Campaign Details */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Campaign Details
+              </Typography>
+              
               <TextField
                 fullWidth
                 label="Campaign Name"
                 value={campaign.name}
-                onChange={(e) => setCampaign(prev => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => setCampaign({ ...campaign, name: e.target.value })}
+                sx={{ mb: 2 }}
               />
-            </Grid>
-            <Grid item xs={12}>
+              
               <TextField
                 fullWidth
                 multiline
                 rows={3}
                 label="Description"
                 value={campaign.description}
-                onChange={(e) => setCampaign(prev => ({ ...prev, description: e.target.value }))}
+                onChange={(e) => setCampaign({ ...campaign, description: e.target.value })}
+                sx={{ mb: 2 }}
               />
-            </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth>
-                <InputLabel>Campaign Type</InputLabel>
-                <Select
-                  value={campaign.type}
-                  label="Campaign Type"
-                  onChange={(e) => setCampaign(prev => ({ ...prev, type: e.target.value }))}
-                >
-                  <MenuItem value="automated">Automated</MenuItem>
-                  <MenuItem value="manual">Manual</MenuItem>
-                  <MenuItem value="scheduled">Scheduled</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={campaign.status}
-                  label="Status"
-                  onChange={(e) => setCampaign(prev => ({ ...prev, status: e.target.value }))}
-                >
-                  <MenuItem value="draft">Draft</MenuItem>
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="paused">Paused</MenuItem>
-                  <MenuItem value="completed">Completed</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowSettings(false)}>Cancel</Button>
-          <Button onClick={() => {
-            handleSave();
-            setShowSettings(false);
-          }} variant="contained">
-            Save Settings
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Analytics Dialog */}
-      <Dialog
-        open={showAnalytics}
-        onClose={() => setShowAnalytics(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>Campaign Analytics</DialogTitle>
-        <DialogContent>
-          <AnalyticsPanel campaign={campaign} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowAnalytics(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
-  );
-};
-
-// Subscribers Panel Component
-const SubscribersPanel = ({ campaign }) => {
-  return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        Subscribers ({campaign.subscribers?.length || 0})
-      </Typography>
-      <Alert severity="info">
-        Subscriber management will be implemented in the next phase.
-      </Alert>
-    </Box>
-  );
-};
-
-// Analytics Panel Component
-const AnalyticsPanel = ({ campaign }) => {
-  const [analytics, setAnalytics] = useState({
-    totalSubscribers: 1250,
-    activeSubscribers: 1180,
-    totalSent: 1150,
-    totalOpens: 345,
-    totalClicks: 89,
-    openRate: 30.0,
-    clickRate: 7.7,
-    conversionRate: 2.1,
-    stepAnalytics: [
-      { stepNumber: 1, name: 'Welcome Email', sent: 1150, opened: 345, clicked: 89 },
-      { stepNumber: 2, name: 'Follow-up', sent: 345, opened: 120, clicked: 45 },
-      { stepNumber: 3, name: 'Promotion', sent: 120, opened: 45, clicked: 23 }
-    ],
-    recentActivity: [
-      { type: 'open', email: 'user1@example.com', timestamp: new Date(Date.now() - 300000) },
-      { type: 'click', email: 'user2@example.com', timestamp: new Date(Date.now() - 600000) },
-      { type: 'sent', email: 'user3@example.com', timestamp: new Date(Date.now() - 900000) }
-    ],
-    performanceChart: [
-      { date: '2024-01-01', sent: 100, opened: 30, clicked: 8 },
-      { date: '2024-01-02', sent: 150, opened: 45, clicked: 12 },
-      { date: '2024-01-03', sent: 200, opened: 60, clicked: 18 },
-      { date: '2024-01-04', sent: 180, opened: 54, clicked: 15 },
-      { date: '2024-01-05', sent: 220, opened: 66, clicked: 20 }
-    ]
-  });
-
-  return (
-    <Box sx={{ height: '100%', overflow: 'auto' }}>
-      <Typography variant="h6" gutterBottom>
-        Campaign Analytics
-      </Typography>
-
-      {/* Key Metrics */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="primary">
-              {analytics.totalSubscribers.toLocaleString()}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Total Subscribers
-            </Typography>
-          </Paper>
+            </CardContent>
+          </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="success.main">
-              {analytics.openRate.toFixed(1)}%
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Open Rate
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="info.main">
-              {analytics.clickRate.toFixed(1)}%
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Click Rate
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="warning.main">
-              {analytics.conversionRate.toFixed(1)}%
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Conversion Rate
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
 
-      {/* Step Analytics */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Step Performance
-        </Typography>
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Step</TableCell>
-                <TableCell align="right">Sent</TableCell>
-                <TableCell align="right">Opened</TableCell>
-                <TableCell align="right">Clicked</TableCell>
-                <TableCell align="right">Open Rate</TableCell>
-                <TableCell align="right">Click Rate</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(analytics.stepAnalytics || []).map((step) => (
-                <TableRow key={step.stepNumber}>
-                  <TableCell>{step.name}</TableCell>
-                  <TableCell align="right">{step.sent}</TableCell>
-                  <TableCell align="right">{step.opened}</TableCell>
-                  <TableCell align="right">{step.clicked}</TableCell>
-                  <TableCell align="right">
-                    {step.sent > 0 ? ((step.opened / step.sent) * 100).toFixed(1) : 0}%
-                  </TableCell>
-                  <TableCell align="right">
-                    {step.opened > 0 ? ((step.clicked / step.opened) * 100).toFixed(1) : 0}%
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
-
-      {/* Recent Activity */}
-      <Grid container spacing={3}>
+        {/* Email Template */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Recent Activity
-            </Typography>
-            <List dense>
-              {(analytics.recentActivity || []).map((activity, index) => (
-                <ListItem key={index}>
-                  <ListItemIcon>
-                    {activity.type === 'open' && <OpenInNewIcon color="success" />}
-                    {activity.type === 'click' && <MouseIcon color="info" />}
-                    {activity.type === 'sent' && <SendIcon color="primary" />}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={`${activity.type.charAt(0).toUpperCase() + activity.type.slice(1)}: ${activity.email}`}
-                    secondary={activity.timestamp.toLocaleString()}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Email Template
+              </Typography>
+              
+              <TextField
+                fullWidth
+                label="Subject Line"
+                value={campaign.emailTemplate?.subject || ''}
+                onChange={(e) => setCampaign({
+                  ...campaign,
+                  emailTemplate: { ...campaign.emailTemplate, subject: e.target.value }
+                })}
+                sx={{ mb: 2 }}
+              />
+              
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                label="Email Body"
+                value={campaign.emailTemplate?.body || ''}
+                onChange={(e) => setCampaign({
+                  ...campaign,
+                  emailTemplate: { ...campaign.emailTemplate, body: e.target.value }
+                })}
+                sx={{ mb: 2 }}
+              />
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Sender Name"
+                    value={campaign.emailTemplate?.senderName || ''}
+                    onChange={(e) => setCampaign({
+                      ...campaign,
+                      emailTemplate: { ...campaign.emailTemplate, senderName: e.target.value }
+                    })}
                   />
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
         </Grid>
+
+        {/* Time Delay Trigger */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Performance Trend
-            </Typography>
-            <Box sx={{ height: 200 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={analytics.performanceChart || []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <RechartsTooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="sent" stroke="#8884d8" name="Sent" />
-                  <Line type="monotone" dataKey="opened" stroke="#82ca9d" name="Opened" />
-                  <Line type="monotone" dataKey="clicked" stroke="#ffc658" name="Clicked" />
-                </LineChart>
-              </ResponsiveContainer>
-            </Box>
-          </Paper>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Time Delay Trigger
+              </Typography>
+              
+              <Box display="flex" alignItems="center" mb={2}>
+                <Typography variant="body2" sx={{ mr: 2 }}>
+                  Send follow-up email after:
+                </Typography>
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Days"
+                  value={campaign.timeDelayTrigger?.days || 0}
+                  onChange={(e) => setCampaign({
+                    ...campaign,
+                    timeDelayTrigger: {
+                      ...campaign.timeDelayTrigger,
+                      days: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  sx={{ width: 80, mr: 1 }}
+                />
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Hours"
+                  value={campaign.timeDelayTrigger?.hours || 0}
+                  onChange={(e) => setCampaign({
+                    ...campaign,
+                    timeDelayTrigger: {
+                      ...campaign.timeDelayTrigger,
+                      hours: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  sx={{ width: 80, mr: 1 }}
+                />
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Minutes"
+                  value={campaign.timeDelayTrigger?.minutes || 0}
+                  onChange={(e) => setCampaign({
+                    ...campaign,
+                    timeDelayTrigger: {
+                      ...campaign.timeDelayTrigger,
+                      minutes: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  sx={{ width: 80, mr: 2 }}
+                />
+                <Button
+                  size="small"
+                  variant={campaign.timeDelayTrigger?.enabled ? "contained" : "outlined"}
+                  onClick={() => setCampaign({
+                    ...campaign,
+                    timeDelayTrigger: {
+                      ...campaign.timeDelayTrigger,
+                      enabled: !campaign.timeDelayTrigger?.enabled
+                    }
+                  })}
+                >
+                  {campaign.timeDelayTrigger?.enabled ? 'Enabled' : 'Enable'}
+                </Button>
+              </Box>
+              
+              {campaign.timeDelayTrigger?.enabled && (
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Follow-up Email:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Subject"
+                    value={campaign.timeDelayTrigger?.followUpEmail?.subject || ''}
+                    onChange={(e) => setCampaign({
+                      ...campaign,
+                      timeDelayTrigger: {
+                        ...campaign.timeDelayTrigger,
+                        followUpEmail: {
+                          ...campaign.timeDelayTrigger.followUpEmail,
+                          subject: e.target.value
+                        }
+                      }
+                    })}
+                    sx={{ mb: 1 }}
+                  />
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={3}
+                    size="small"
+                    label="Body"
+                    value={campaign.timeDelayTrigger?.followUpEmail?.body || ''}
+                    onChange={(e) => setCampaign({
+                      ...campaign,
+                      timeDelayTrigger: {
+                        ...campaign.timeDelayTrigger,
+                        followUpEmail: {
+                          ...campaign.timeDelayTrigger.followUpEmail,
+                          body: e.target.value
+                        }
+                      }
+                    })}
+                  />
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Behavior Triggers */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Behavior Triggers
+              </Typography>
+              
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Send follow-up emails when users interact with your emails
+              </Typography>
+              
+              {['open', 'click', 'idle'].map((behavior) => {
+                const existingTrigger = campaign.behaviorTriggers?.find(t => t.behavior === behavior);
+                return (
+                  <Box key={behavior} sx={{ mb: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                      <Typography variant="subtitle2" sx={{ textTransform: 'capitalize' }}>
+                        On {behavior}
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant={existingTrigger?.enabled ? "contained" : "outlined"}
+                        onClick={() => {
+                          if (existingTrigger) {
+                            // Toggle existing trigger
+                            setCampaign({
+                              ...campaign,
+                              behaviorTriggers: campaign.behaviorTriggers.map(t =>
+                                t.behavior === behavior
+                                  ? { ...t, enabled: !t.enabled }
+                                  : t
+                              )
+                            });
+                          } else {
+                            // Add new trigger
+                            setCampaign({
+                              ...campaign,
+                              behaviorTriggers: [
+                                ...(campaign.behaviorTriggers || []),
+                                {
+                                  behavior,
+                                  enabled: true,
+                                  followUpEmail: { subject: '', body: '' }
+                                }
+                              ]
+                            });
+                          }
+                        }}
+                      >
+                        {existingTrigger?.enabled ? 'Enabled' : 'Enable'}
+                      </Button>
+                    </Box>
+                    
+                    {existingTrigger?.enabled && (
+                      <Box>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Subject"
+                          value={existingTrigger.followUpEmail?.subject || ''}
+                          onChange={(e) => setCampaign({
+                            ...campaign,
+                            behaviorTriggers: campaign.behaviorTriggers.map(t =>
+                              t.behavior === behavior
+                                ? {
+                                    ...t,
+                                    followUpEmail: {
+                                      ...t.followUpEmail,
+                                      subject: e.target.value
+                                    }
+                                  }
+                                : t
+                            )
+                          })}
+                          sx={{ mb: 1 }}
+                        />
+                        <TextField
+                          fullWidth
+                          multiline
+                          rows={2}
+                          size="small"
+                          label="Body"
+                          value={existingTrigger.followUpEmail?.body || ''}
+                          onChange={(e) => setCampaign({
+                            ...campaign,
+                            behaviorTriggers: campaign.behaviorTriggers.map(t =>
+                              t.behavior === behavior
+                                ? {
+                                    ...t,
+                                    followUpEmail: {
+                                      ...t.followUpEmail,
+                                      body: e.target.value
+                                    }
+                                  }
+                                : t
+                            )
+                          })}
+                        />
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Recipients */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Recipients ({campaign.recipients?.length || 0})
+              </Typography>
+              
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Add email addresses manually to send emails to specific recipients
+              </Typography>
+              
+              <Box display="flex" gap={1} mb={2}>
+                <TextField
+                  size="small"
+                  placeholder="Email"
+                  value={newRecipient.email}
+                  onChange={(e) => setNewRecipient({ ...newRecipient, email: e.target.value })}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddRecipient()}
+                />
+                <TextField
+                  size="small"
+                  placeholder="Name (optional)"
+                  value={newRecipient.name}
+                  onChange={(e) => setNewRecipient({ ...newRecipient, name: e.target.value })}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddRecipient()}
+                />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleAddRecipient}
+                  disabled={!newRecipient.email.trim()}
+                >
+                  Add
+                </Button>
+              </Box>
+              
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Email</TableCell>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {campaign.recipients?.map((recipient, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{recipient.email}</TableCell>
+                        <TableCell>{recipient.name || '-'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={recipient.status}
+                            size="small"
+                            color={recipient.status === 'active' ? 'success' : 'default'}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleRemoveRecipient(recipient.email)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Actions */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Actions
+              </Typography>
+              
+              <Box display="flex" gap={2}>
+                <Button
+                  variant="contained"
+                  startIcon={<EmailIcon />}
+                  onClick={handleSendEmail}
+                  disabled={campaign.status !== 'active' || !campaign.recipients?.length}
+                >
+                  Send Email Now
+                </Button>
+                
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate('/campaigns')}
+                >
+                  Back to Campaigns
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
     </Box>

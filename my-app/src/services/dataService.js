@@ -40,32 +40,6 @@ class DataService {
         averageOrderValue: 100.2,
         customerSatisfaction: 4.6,
       },
-      emailCampaigns: {
-        'campaign-1': {
-          name: 'Welcome Series',
-          subscribers: 1250,
-          sent: 1150,
-          opens: 345,
-          clicks: 89,
-          conversions: 23,
-        },
-        'campaign-2': {
-          name: 'Product Launch',
-          subscribers: 890,
-          sent: 890,
-          opens: 267,
-          clicks: 67,
-          conversions: 12,
-        },
-        'campaign-3': {
-          name: 'Newsletter',
-          subscribers: 2100,
-          sent: 2100,
-          opens: 630,
-          clicks: 189,
-          conversions: 42,
-        },
-      },
     };
   }
 
@@ -83,8 +57,6 @@ class DataService {
         return this.sampleData.products;
       case 'metrics':
         return this.sampleData.metrics;
-      case 'email-campaigns':
-        return this.sampleData.emailCampaigns;
       default:
         return this.sampleData.sales; // Default fallback
     }
@@ -96,11 +68,7 @@ class DataService {
     return this.sampleData.metrics[metricName] || 0;
   }
 
-  // Get email campaign data
-  async getEmailCampaign(campaignId) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return this.sampleData.emailCampaigns[campaignId] || null;
-  }
+
 
   // Get chart data with filters
   async getChartData(source, filters = {}) {
