@@ -44,7 +44,9 @@ class EmailCampaignEngine {
             sentAt: new Date(),
             timeDelayEmailSent: false,
             idleEmailSent: false,
-            hasLinks: hasLinks
+            hasLinks: hasLinks,
+            openFollowUpSent: false,
+            clickFollowUpSent: false
           });
           
           console.log(`📧 Added manual email entry for ${recipient.email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
@@ -137,15 +139,34 @@ class EmailCampaignEngine {
       );
 
       if (behaviorTrigger && behaviorTrigger.followUpEmail) {
-        console.log(`📧 Found behavior trigger for ${behavior}, sending follow-up email to ${userEmail}`);
+        console.log(`📧 Found behavior trigger for ${behavior}, checking if follow-up already sent...`);
         
-        // Send the follow-up email
-        await this.sendSingleEmail(campaign, userEmail, behaviorTrigger.followUpEmail);
-        
-        // Update analytics
-        campaign.analytics.totalSent += 1;
-        
-        console.log(`✅ Sent ${behavior} follow-up email to ${userEmail}`);
+        // Check if we already sent a follow-up for this behavior
+        // We'll track this by adding a flag to the most recent manual email
+        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+          const latestManualEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+          
+          // Check if we already sent a follow-up for this behavior
+          const behaviorKey = `${behavior}FollowUpSent`;
+          if (latestManualEmail[behaviorKey]) {
+            console.log(`⏭️ Skipping ${behavior} follow-up for ${userEmail} - already sent for this manual email`);
+          } else {
+            console.log(`📧 Sending ${behavior} follow-up email to ${userEmail}`);
+            
+            // Send the follow-up email
+            await this.sendSingleEmail(campaign, userEmail, behaviorTrigger.followUpEmail);
+            
+            // Mark that we sent the follow-up for this behavior
+            latestManualEmail[behaviorKey] = true;
+            
+            // Update analytics
+            campaign.analytics.totalSent += 1;
+            
+            console.log(`✅ Sent ${behavior} follow-up email to ${userEmail}`);
+          }
+        } else {
+          console.log(`⚠️ No manual emails found for ${userEmail}, cannot send behavior follow-up`);
+        }
       } else {
         console.log(`ℹ️ No behavior trigger found for ${behavior} or trigger is disabled`);
       }
@@ -359,6 +380,13 @@ class EmailCampaignEngine {
                 // Skip if idle email already sent for this manual email
                 if (manualEmail.idleEmailSent) {
                   console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - idle email already sent`);
+                  continue;
+                }
+                
+                // Check if user has already interacted with this email (opened or clicked)
+                // If they have, don't send idle email
+                if (manualEmail.openFollowUpSent || manualEmail.clickFollowUpSent) {
+                  console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - user already interacted (opened: ${manualEmail.openFollowUpSent}, clicked: ${manualEmail.clickFollowUpSent})`);
                   continue;
                 }
                 
@@ -614,7 +642,9 @@ class EmailCampaignEngine {
             sentAt: new Date(),
             timeDelayEmailSent: false,
             idleEmailSent: false,
-            hasLinks: hasLinks
+            hasLinks: hasLinks,
+            openFollowUpSent: false,
+            clickFollowUpSent: false
           });
           
           console.log(`📧 Added manual email entry for ${email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);

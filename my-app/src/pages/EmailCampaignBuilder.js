@@ -54,8 +54,6 @@ const EmailCampaignBuilder = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [newRecipient, setNewRecipient] = useState({ email: '', name: '' });
-  const [testBehavior, setTestBehavior] = useState({ email: '', behavior: 'open' });
-  const [testResult, setTestResult] = useState(null);
   const [sendToSpecificOpen, setSendToSpecificOpen] = useState(false);
   const [selectedRecipients, setSelectedRecipients] = useState([]);
   const [clickTrackingEmail, setClickTrackingEmail] = useState('');
@@ -256,36 +254,10 @@ const EmailCampaignBuilder = () => {
     }
   };
 
-  const handleTestBehavior = async () => {
-    try {
-      setTestResult(null);
-      const response = await fetch(`/api/campaigns/${id}/test-behavior`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          userEmail: testBehavior.email,
-          behavior: testBehavior.behavior
-        })
-      });
 
-      const result = await response.json();
-      setTestResult(result);
-      
-      if (result.success) {
-        // Refresh campaign data to see updated analytics
-        fetchCampaign();
-      }
-    } catch (error) {
-      setTestResult({ success: false, message: 'Failed to test behavior' });
-    }
-  };
 
   const handleCheckTriggers = async () => {
     try {
-      setTestResult(null);
       const response = await fetch('/api/campaigns/check-triggers', {
         method: 'POST',
         headers: {
@@ -295,7 +267,6 @@ const EmailCampaignBuilder = () => {
       });
 
       const result = await response.json();
-      setTestResult(result);
       
       if (response.ok) {
         alert(`Time trigger check completed successfully. Check console for details.`);
@@ -304,7 +275,6 @@ const EmailCampaignBuilder = () => {
         alert(`Time trigger check failed: ${result.error}`);
       }
     } catch (error) {
-      setTestResult({ success: false, message: 'Failed to check time triggers' });
       alert('Failed to check time triggers');
     }
   };
@@ -881,105 +851,9 @@ const EmailCampaignBuilder = () => {
               <Typography variant="h6" gutterBottom>
                 Test Behavior Triggers
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Test open and click triggers for recipients
-              </Typography>
-              
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    label="Recipient Email"
-                    value={testBehavior.email}
-                    onChange={(e) => setTestBehavior(prev => ({ ...prev, email: e.target.value }))}
-                    placeholder="Enter recipient email to test"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <FormControl fullWidth>
-                    <InputLabel>Behavior</InputLabel>
-                    <Select
-                      value={testBehavior.behavior}
-                      onChange={(e) => setTestBehavior(prev => ({ ...prev, behavior: e.target.value }))}
-                    >
-                      <MenuItem value="open">Open Email</MenuItem>
-                      <MenuItem value="click">Click Link</MenuItem>
-                      <MenuItem value="idle">Idle</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={handleTestBehavior}
-                    disabled={!testBehavior.email}
-                    fullWidth
-                  >
-                    Test Behavior
-                  </Button>
-                </Grid>
-                <Grid item xs={12} sm={2}>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setTestResult(null)}
-                    fullWidth
-                  >
-                    Clear
-                  </Button>
-                </Grid>
-              </Grid>
 
-              {testResult && (
-                <Box mt={2} p={2} bgcolor={testResult.success ? 'success.light' : 'error.light'} borderRadius={1}>
-                  <Typography variant="body2" color={testResult.success ? 'success.dark' : 'error.dark'}>
-                    <strong>Test Result:</strong> {testResult.message}
-                    {testResult.followUpSent && (
-                      <span> ✅ Follow-up email was sent!</span>
-                    )}
-                  </Typography>
-                </Box>
-              )}
 
-              {/* Test Behavior Triggers */}
-              <Box mt={3}>
-                <Typography variant="h6" gutterBottom>
-                  Test Behavior Triggers
-                </Typography>
-                <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
-                  <TextField
-                    size="small"
-                    label="Recipient Email"
-                    value={testBehavior.email}
-                    onChange={(e) => setTestBehavior({ ...testBehavior, email: e.target.value })}
-                    placeholder="Enter email to test tracking"
-                  />
-                  <FormControl size="small" sx={{ minWidth: 120 }}>
-                    <InputLabel>Behavior</InputLabel>
-                    <Select
-                      value={testBehavior.behavior}
-                      onChange={(e) => setTestBehavior({ ...testBehavior, behavior: e.target.value })}
-                      label="Behavior"
-                    >
-                      <MenuItem value="open">Open</MenuItem>
-                      <MenuItem value="click">Click</MenuItem>
-                      <MenuItem value="idle">Idle</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <Button
-                    variant="outlined"
-                    onClick={handleTestBehavior}
-                    disabled={!testBehavior.email}
-                  >
-                    Test
-                  </Button>
-                </Box>
-                {testResult && (
-                  <Alert severity={testResult.success ? 'success' : 'error'} sx={{ mt: 2 }}>
-                    {testResult.message}
-                  </Alert>
-                )}
-              </Box>
+
 
               {/* Generate Click Tracking Link */}
               <Box mt={3}>

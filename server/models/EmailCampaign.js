@@ -52,7 +52,9 @@ const emailCampaignSchema = new mongoose.Schema({
       sentAt: Date,
       timeDelayEmailSent: { type: Boolean, default: false },
       idleEmailSent: { type: Boolean, default: false },
-      hasLinks: { type: Boolean, default: false } // Track if email contains clickable links
+      hasLinks: { type: Boolean, default: false }, // Track if email contains clickable links
+      openFollowUpSent: { type: Boolean, default: false }, // Track if open follow-up was sent
+      clickFollowUpSent: { type: Boolean, default: false } // Track if click follow-up was sent
     }],
     status: {
       type: String,
