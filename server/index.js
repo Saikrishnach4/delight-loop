@@ -38,11 +38,16 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/delight-l
 
 // Test email service on startup
 const emailService = require('./services/emailService');
+const emailCampaignEngine = require('./services/emailCampaignEngine');
+
 setTimeout(() => {
   emailService.verifyConnection()
     .then(isConnected => {
       if (isConnected) {
         console.log('✅ Email service is ready and connected');
+        // Start the time delay trigger checking
+        emailCampaignEngine.startTimeTriggerChecking();
+        console.log('⏰ Time delay trigger checking started');
       } else {
         console.log('❌ Email service is not configured properly');
         console.log('Please check your EMAIL_USER and EMAIL_PASS in .env file');

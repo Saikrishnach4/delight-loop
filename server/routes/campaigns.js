@@ -129,16 +129,58 @@ router.post('/:id/send', auth, async (req, res) => {
 router.post('/:id/behavior', async (req, res) => {
   try {
     const { userEmail, behavior } = req.body;
-
+    
     if (!userEmail || !behavior) {
-      return res.status(400).json({ error: 'User email and behavior are required' });
+      return res.status(400).json({ error: 'userEmail and behavior are required' });
     }
-
-    await emailCampaignEngine.handleUserBehavior(req.params.id, userEmail, behavior);
-    res.json({ message: 'Behavior recorded successfully' });
+    
+    if (!['open', 'click', 'idle'].includes(behavior)) {
+      return res.status(400).json({ error: 'behavior must be open, click, or idle' });
+    }
+    
+    const result = await emailCampaignEngine.handleUserBehavior(req.params.id, userEmail, behavior);
+    
+    if (result.success) {
+      res.json({
+        message: result.message,
+        followUpSent: result.followUpSent,
+        behavior: behavior,
+        userEmail: userEmail
+      });
+    } else {
+      res.status(400).json({ error: result.message });
+    }
   } catch (error) {
-    console.error('Error recording behavior:', error);
-    res.status(500).json({ error: 'Failed to record behavior' });
+    console.error('Error handling behavior:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test behavior trigger manually (for debugging)
+router.post('/:id/test-behavior', auth, async (req, res) => {
+  try {
+    const { userEmail, behavior } = req.body;
+    
+    if (!userEmail || !behavior) {
+      return res.status(400).json({ error: 'userEmail and behavior are required' });
+    }
+    
+    if (!['open', 'click', 'idle'].includes(behavior)) {
+      return res.status(400).json({ error: 'behavior must be open, click, or idle' });
+    }
+    
+    const result = await emailCampaignEngine.testBehaviorTrigger(req.params.id, userEmail, behavior);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+      followUpSent: result.followUpSent,
+      behavior: behavior,
+      userEmail: userEmail
+    });
+  } catch (error) {
+    console.error('Error testing behavior:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -270,6 +312,45 @@ router.post('/test-email', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Error sending test email:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manually check time delay triggers (for testing)
+router.post('/check-triggers', auth, async (req, res) => {
+  try {
+    console.log('🔍 Manual trigger check requested');
+    await emailCampaignEngine.checkTimeTriggers();
+    res.json({ message: 'Time delay triggers checked successfully' });
+  } catch (error) {
+    console.error('Error checking triggers:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test endpoint to check campaign configuration
+router.get('/test-config/:campaignId', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findById(req.params.campaignId);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    const config = {
+      name: campaign.name,
+      status: campaign.status,
+      timeDelayTrigger: campaign.timeDelayTrigger,
+      recipients: campaign.recipients.map(r => ({
+        email: r.email,
+        status: r.status,
+        manualEmailSentAt: r.manualEmailSentAt,
+        timeDelayEmailSent: r.timeDelayEmailSent
+      }))
+    };
+
+    res.json(config);
+  } catch (error) {
+    console.error('Error getting campaign config:', error);
     res.status(500).json({ error: error.message });
   }
 });
