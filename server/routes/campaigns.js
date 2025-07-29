@@ -215,33 +215,7 @@ router.delete('/:id/recipients/:email', auth, async (req, res) => {
 // Get campaign analytics
 router.get('/:id/analytics', auth, async (req, res) => {
   try {
-    const campaign = await EmailCampaign.findById(req.params.id);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-
-    // Calculate additional analytics
-    const totalRecipients = campaign.recipients.length;
-    const activeRecipients = campaign.recipients.filter(r => r.status === 'active').length;
-    const recipientsWithManualEmail = campaign.recipients.filter(r => r.manualEmailSentAt).length;
-    const recipientsWithTimeDelayEmail = campaign.recipients.filter(r => r.timeDelayEmailSent).length;
-
-    const analytics = {
-      ...campaign.analytics,
-      totalRecipients,
-      activeRecipients,
-      recipientsWithManualEmail,
-      recipientsWithTimeDelayEmail,
-      recipients: campaign.recipients.map(r => ({
-        email: r.email,
-        name: r.name,
-        status: r.status,
-        manualEmailSentAt: r.manualEmailSentAt,
-        timeDelayEmailSent: r.timeDelayEmailSent,
-        lastActivity: r.lastActivity
-      }))
-    };
-
+    const analytics = await emailCampaignEngine.getCampaignAnalytics(req.params.id);
     res.json(analytics);
   } catch (error) {
     console.error('Error getting campaign analytics:', error);
@@ -496,6 +470,22 @@ router.get('/track/click/:campaignId/:userEmail', async (req, res) => {
     console.error('Error tracking email click:', error);
     // Redirect to home page if there's an error
     res.redirect('/');
+  }
+});
+
+// Test endpoint to simulate opens and clicks for debugging
+router.post('/:id/test-interactions', auth, async (req, res) => {
+  try {
+    const { recipientEmail, action } = req.body; // action can be 'open' or 'click'
+    
+    console.log(`🧪 Testing ${action} for ${recipientEmail} in campaign ${req.params.id}`);
+    
+    const result = await emailCampaignEngine.handleUserBehavior(req.params.id, recipientEmail, action);
+    
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('Error testing interactions:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -58,9 +58,13 @@ const CampaignAnalytics = () => {
       }
 
       const data = await response.json();
+      console.log('📊 Analytics data received:', data);
+      console.log('📊 Campaign data:', data.campaign);
+      console.log('📊 Recipients data:', data.recipients);
       setAnalytics(data);
       setCampaign(data.campaign);
     } catch (error) {
+      console.error('❌ Error fetching analytics:', error);
       setError(error.message);
     } finally {
       setLoading(false);
@@ -74,10 +78,12 @@ const CampaignAnalytics = () => {
   };
 
   const getEmailStatusIcon = (manualEmail) => {
-    if (manualEmail.timeDelayEmailSent && manualEmail.idleEmailSent) {
+    if (manualEmail.opened || manualEmail.clicked) {
       return <CheckCircleIcon color="success" fontSize="small" />;
     } else if (manualEmail.timeDelayEmailSent) {
       return <ScheduleIcon color="warning" fontSize="small" />;
+    } else if (manualEmail.idleEmailSent) {
+      return <WarningIcon color="error" fontSize="small" />;
     } else if (manualEmail.hasLinks) {
       return <LinkIcon color="info" fontSize="small" />;
     } else {
@@ -86,10 +92,14 @@ const CampaignAnalytics = () => {
   };
 
   const getEmailStatusText = (manualEmail) => {
-    if (manualEmail.timeDelayEmailSent && manualEmail.idleEmailSent) {
-      return 'Complete';
-    } else if (manualEmail.timeDelayEmailSent) {
-      return 'Follow-up Sent';
+    const statuses = [];
+    if (manualEmail.opened) statuses.push('Opened');
+    if (manualEmail.clicked) statuses.push('Clicked');
+    if (manualEmail.timeDelayEmailSent) statuses.push('Follow-up Sent');
+    if (manualEmail.idleEmailSent) statuses.push('Idle Reminder Sent');
+    
+    if (statuses.length > 0) {
+      return statuses.join(', ');
     } else if (manualEmail.hasLinks) {
       return 'With Links';
     } else {
@@ -98,10 +108,12 @@ const CampaignAnalytics = () => {
   };
 
   const getEmailStatusColor = (manualEmail) => {
-    if (manualEmail.timeDelayEmailSent && manualEmail.idleEmailSent) {
+    if (manualEmail.opened || manualEmail.clicked) {
       return 'success';
     } else if (manualEmail.timeDelayEmailSent) {
       return 'warning';
+    } else if (manualEmail.idleEmailSent) {
+      return 'error';
     } else if (manualEmail.hasLinks) {
       return 'info';
     } else {
@@ -163,6 +175,86 @@ const CampaignAnalytics = () => {
         <Typography variant="h4" component="h1">
           Campaign Analytics
         </Typography>
+        <Box sx={{ ml: 'auto' }}>
+          <Button
+            variant="outlined"
+            onClick={fetchAnalytics}
+            sx={{ mr: 2 }}
+          >
+            Refresh Analytics
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              console.log('📊 Current analytics state:', analytics);
+              console.log('📊 Current campaign state:', campaign);
+            }}
+            sx={{ mr: 2 }}
+          >
+            Debug Data
+          </Button>
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={async () => {
+              if (analytics?.recipients?.[0]?.email) {
+                try {
+                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                      recipientEmail: analytics.recipients[0].email,
+                      action: 'open'
+                    })
+                  });
+                  const result = await response.json();
+                  console.log('🧪 Test open result:', result);
+                  if (result.success) {
+                    fetchAnalytics(); // Refresh analytics
+                  }
+                } catch (error) {
+                  console.error('❌ Test open failed:', error);
+                }
+              }
+            }}
+            sx={{ mr: 1 }}
+          >
+            Test Open
+          </Button>
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={async () => {
+              if (analytics?.recipients?.[0]?.email) {
+                try {
+                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                      recipientEmail: analytics.recipients[0].email,
+                      action: 'click'
+                    })
+                  });
+                  const result = await response.json();
+                  console.log('🧪 Test click result:', result);
+                  if (result.success) {
+                    fetchAnalytics(); // Refresh analytics
+                  }
+                } catch (error) {
+                  console.error('❌ Test click failed:', error);
+                }
+              }
+            }}
+          >
+            Test Click
+          </Button>
+        </Box>
       </Box>
 
       {campaign && (
@@ -185,7 +277,7 @@ const CampaignAnalytics = () => {
 
       {/* Key Metrics */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
           <Card>
             <CardContent>
               <Typography variant="h3" color="primary" gutterBottom>
@@ -197,7 +289,7 @@ const CampaignAnalytics = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
           <Card>
             <CardContent>
               <Typography variant="h3" color="success.main" gutterBottom>
@@ -209,37 +301,116 @@ const CampaignAnalytics = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
           <Card>
             <CardContent>
               <Typography variant="h3" color="info.main" gutterBottom>
-                {totalManualEmails}
+                {analytics.totalSent || 0}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Manual Emails Sent
+                Total Emails Sent
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={2}>
+          <Card>
+            <CardContent>
+              <Typography variant="h3" color="secondary" gutterBottom>
+                {analytics.totalOpens || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Total Opens
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {analytics.openRate || 0}% Rate
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
           <Card>
             <CardContent>
               <Typography variant="h3" color="warning.main" gutterBottom>
+                {analytics.totalClicks || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Total Clicks
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {analytics.clickRate || 0}% Rate
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <Card>
+            <CardContent>
+              <Typography variant="h3" color="error.main" gutterBottom>
                 {totalFollowUps}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Follow-up Emails Sent
+                Follow-ups Sent
               </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
+      {/* Campaign Performance Summary */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Campaign Performance Summary
+          </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle1" gutterBottom>
+                Email Performance
+              </Typography>
+              <Box sx={{ pl: 2 }}>
+                <Typography variant="body2">
+                  • <strong>Total Emails Sent:</strong> {analytics.totalSent || 0}
+                </Typography>
+                <Typography variant="body2">
+                  • <strong>Total Opens:</strong> {analytics.totalOpens || 0} ({analytics.openRate || 0}% rate)
+                </Typography>
+                <Typography variant="body2">
+                  • <strong>Total Clicks:</strong> {analytics.totalClicks || 0} ({analytics.clickRate || 0}% rate)
+                </Typography>
+                <Typography variant="body2">
+                  • <strong>Total Follow-ups:</strong> {totalFollowUps}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle1" gutterBottom>
+                Recipient Overview
+              </Typography>
+              <Box sx={{ pl: 2 }}>
+                <Typography variant="body2">
+                  • <strong>Total Recipients:</strong> {totalRecipients}
+                </Typography>
+                <Typography variant="body2">
+                  • <strong>Active Recipients:</strong> {activeRecipients}
+                </Typography>
+                <Typography variant="body2">
+                  • <strong>Average Manual Emails per Recipient:</strong> {totalRecipients > 0 ? (totalManualEmails / totalRecipients).toFixed(1) : 0}
+                </Typography>
+                <Typography variant="body2">
+                  • <strong>Average Follow-ups per Recipient:</strong> {totalRecipients > 0 ? (totalFollowUps / totalRecipients).toFixed(1) : 0}
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+
       {/* Recipients Table */}
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Recipient Details
+            Detailed Recipient Analytics
           </Typography>
           <TableContainer component={Paper} variant="outlined">
             <Table>
@@ -249,7 +420,12 @@ const CampaignAnalytics = () => {
                   <TableCell>Name</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Manual Emails</TableCell>
+                  <TableCell>Opens</TableCell>
+                  <TableCell>Clicks</TableCell>
                   <TableCell>Follow-ups</TableCell>
+                  <TableCell>Idle Emails</TableCell>
+                  <TableCell>Open Rate</TableCell>
+                  <TableCell>Click Rate</TableCell>
                   <TableCell>Last Activity</TableCell>
                   <TableCell>Email History</TableCell>
                 </TableRow>
@@ -257,7 +433,11 @@ const CampaignAnalytics = () => {
               <TableBody>
                 {analytics?.recipients?.map((recipient, index) => (
                   <TableRow key={index}>
-                    <TableCell>{recipient.email}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="medium">
+                        {recipient.email}
+                      </Typography>
+                    </TableCell>
                     <TableCell>{recipient.name || '-'}</TableCell>
                     <TableCell>
                       <Chip 
@@ -267,13 +447,38 @@ const CampaignAnalytics = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
+                      <Typography variant="body2" fontWeight="medium">
                         {recipient.manualEmailsCount || 0}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
+                      <Typography variant="body2" color="secondary" fontWeight="medium">
+                        {recipient.totalOpens || 0}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="warning.main" fontWeight="medium">
+                        {recipient.totalClicks || 0}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="info.main" fontWeight="medium">
                         {recipient.followUpsSent || 0}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="error.main" fontWeight="medium">
+                        {recipient.idleEmailsSent || 0}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="secondary">
+                        {recipient.openRate || 0}%
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="warning.main">
+                        {recipient.clickRate || 0}%
                       </Typography>
                     </TableCell>
                     <TableCell>
@@ -303,6 +508,12 @@ const CampaignAnalytics = () => {
                               )}
                               {email.idleEmailSent && (
                                 <WarningIcon fontSize="small" sx={{ ml: 0.5, color: 'error.main' }} />
+                              )}
+                              {email.opened && (
+                                <CheckCircleIcon fontSize="small" sx={{ ml: 0.5, color: 'secondary' }} />
+                              )}
+                              {email.clicked && (
+                                <LinkIcon fontSize="small" sx={{ ml: 0.5, color: 'warning.main' }} />
                               )}
                             </Typography>
                           </Box>
@@ -375,6 +586,39 @@ const CampaignAnalytics = () => {
         </CardContent>
       </Card>
 
+      {/* Debug Section */}
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Debug Information
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Use the test buttons above to simulate opens and clicks, then check the console for detailed logs.
+          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>Campaign ID:</strong> {campaignId}
+            </Typography>
+            <Typography variant="body2">
+              <strong>Total Recipients:</strong> {analytics?.recipients?.length || 0}
+            </Typography>
+            <Typography variant="body2">
+              <strong>Campaign Analytics:</strong> {JSON.stringify(analytics?.totalSent || 0)} sent, {analytics?.totalOpens || 0} opens, {analytics?.totalClicks || 0} clicks
+            </Typography>
+            {analytics?.recipients?.map((recipient, index) => (
+              <Box key={index} sx={{ mt: 1, p: 1, border: '1px solid #ddd', borderRadius: 1 }}>
+                <Typography variant="body2" fontWeight="bold">
+                  {recipient.email}
+                </Typography>
+                <Typography variant="caption">
+                  Manual Emails: {recipient.manualEmailsCount}, Opens: {recipient.totalOpens}, Clicks: {recipient.totalClicks}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </CardContent>
+      </Card>
+
       {/* Legend */}
       <Card sx={{ mt: 3 }}>
         <CardContent>
@@ -382,28 +626,40 @@ const CampaignAnalytics = () => {
             Email Status Legend
           </Typography>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2}>
               <Box display="flex" alignItems="center">
                 <EmailIcon color="action" sx={{ mr: 1 }} />
                 <Typography variant="body2">Manual Email Sent</Typography>
               </Box>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2}>
               <Box display="flex" alignItems="center">
                 <LinkIcon color="info" sx={{ mr: 1 }} />
                 <Typography variant="body2">Email with Links</Typography>
               </Box>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2}>
               <Box display="flex" alignItems="center">
                 <ScheduleIcon color="warning" sx={{ mr: 1 }} />
-                <Typography variant="body2">Follow-up Sent</Typography>
+                <Typography variant="body2">Time Delay Follow-up</Typography>
               </Box>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2}>
               <Box display="flex" alignItems="center">
-                <CheckCircleIcon color="success" sx={{ mr: 1 }} />
-                <Typography variant="body2">Complete (All Sent)</Typography>
+                <WarningIcon color="error" sx={{ mr: 1 }} />
+                <Typography variant="body2">Idle Reminder Sent</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <Box display="flex" alignItems="center">
+                <CheckCircleIcon color="secondary" sx={{ mr: 1 }} />
+                <Typography variant="body2">Email Opened</Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+              <Box display="flex" alignItems="center">
+                <LinkIcon color="warning" sx={{ mr: 1 }} />
+                <Typography variant="body2">Link Clicked</Typography>
               </Box>
             </Grid>
           </Grid>

@@ -46,7 +46,9 @@ class EmailCampaignEngine {
             idleEmailSent: false,
             hasLinks: hasLinks,
             openFollowUpSent: false,
-            clickFollowUpSent: false
+            clickFollowUpSent: false,
+            opened: false,
+            clicked: false
           });
           
           console.log(`📧 Added manual email entry for ${recipient.email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
@@ -124,13 +126,29 @@ class EmailCampaignEngine {
       // Update recipient's last activity
       recipient.lastActivity = new Date();
       
-      // Update analytics
+      // Update analytics and track actual interactions
       if (behavior === 'open') {
         campaign.analytics.totalOpens += 1;
         console.log(`📊 Updated opens count for campaign ${campaign.name}`);
+        
+        // Mark the most recent manual email as opened
+        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+          const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+          latestEmail.opened = true;
+          latestEmail.openedAt = new Date();
+          console.log(`📧 Marked latest email as opened for ${userEmail}`);
+        }
       } else if (behavior === 'click') {
         campaign.analytics.totalClicks += 1;
         console.log(`📊 Updated clicks count for campaign ${campaign.name}`);
+        
+        // Mark the most recent manual email as clicked
+        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+          const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+          latestEmail.clicked = true;
+          latestEmail.clickedAt = new Date();
+          console.log(`📧 Marked latest email as clicked for ${userEmail}`);
+        }
       }
 
       // Check if there's a behavior trigger for this action
@@ -506,10 +524,16 @@ class EmailCampaignEngine {
   // Get campaign analytics
   async getCampaignAnalytics(campaignId) {
     try {
+      console.log(`📊 Getting analytics for campaign: ${campaignId}`);
+      
       const campaign = await EmailCampaign.findById(campaignId);
       if (!campaign) {
         throw new Error('Campaign not found');
       }
+
+      console.log(`📊 Campaign found: ${campaign.name}`);
+      console.log(`📊 Campaign analytics:`, campaign.analytics);
+      console.log(`📊 Total recipients: ${campaign.recipients.length}`);
 
       const analytics = {
         campaign: {
@@ -523,24 +547,61 @@ class EmailCampaignEngine {
         totalSent: campaign.analytics.totalSent || 0,
         totalOpens: campaign.analytics.totalOpens || 0,
         totalClicks: campaign.analytics.totalClicks || 0,
-        recipients: campaign.recipients.map(recipient => ({
-          email: recipient.email,
-          name: recipient.name,
-          status: recipient.status,
-          lastActivity: recipient.lastActivity,
-          manualEmailsCount: recipient.manualEmails ? recipient.manualEmails.length : 0,
-          followUpsSent: recipient.manualEmails ? recipient.manualEmails.filter(me => me.timeDelayEmailSent).length : 0,
-          idleEmailsSent: recipient.manualEmails ? recipient.manualEmails.filter(me => me.idleEmailSent).length : 0,
-          emailsWithLinks: recipient.manualEmails ? recipient.manualEmails.filter(me => me.hasLinks).length : 0,
-          manualEmails: recipient.manualEmails ? recipient.manualEmails.map(me => ({
-            sentAt: me.sentAt,
-            timeDelayEmailSent: me.timeDelayEmailSent,
-            idleEmailSent: me.idleEmailSent,
-            hasLinks: me.hasLinks
-          })) : []
-        }))
+        // Calculate rates
+        openRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalOpens || 0) / campaign.analytics.totalSent * 100).toFixed(1) : 0,
+        clickRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalClicks || 0) / campaign.analytics.totalSent * 100).toFixed(1) : 0,
+        recipients: campaign.recipients.map(recipient => {
+          console.log(`📊 Processing recipient: ${recipient.email}`);
+          console.log(`📊 Manual emails:`, recipient.manualEmails);
+          
+          // Calculate recipient-specific analytics
+          const totalFollowUps = recipient.manualEmails ? recipient.manualEmails.filter(me => me.timeDelayEmailSent).length : 0;
+          const totalIdleEmails = recipient.manualEmails ? recipient.manualEmails.filter(me => me.idleEmailSent).length : 0;
+          const totalOpenFollowUps = recipient.manualEmails ? recipient.manualEmails.filter(me => me.openFollowUpSent).length : 0;
+          const totalClickFollowUps = recipient.manualEmails ? recipient.manualEmails.filter(me => me.clickFollowUpSent).length : 0;
+          
+          // Track actual opens and clicks
+          const totalOpens = recipient.manualEmails ? recipient.manualEmails.filter(me => me.opened).length : 0;
+          const totalClicks = recipient.manualEmails ? recipient.manualEmails.filter(me => me.clicked).length : 0;
+          const totalBehaviorEmails = totalOpens + totalClicks;
+          
+          console.log(`📊 ${recipient.email} - Opens: ${totalOpens}, Clicks: ${totalClicks}, Follow-ups: ${totalFollowUps}`);
+          
+          return {
+            email: recipient.email,
+            name: recipient.name,
+            status: recipient.status,
+            lastActivity: recipient.lastActivity,
+            // Email counts
+            manualEmailsCount: recipient.manualEmails ? recipient.manualEmails.length : 0,
+            followUpsSent: totalFollowUps,
+            idleEmailsSent: totalIdleEmails,
+            emailsWithLinks: recipient.manualEmails ? recipient.manualEmails.filter(me => me.hasLinks).length : 0,
+            // Behavior tracking (using follow-up counts as proxy for actual interactions)
+            totalOpens: totalOpens,
+            totalClicks: totalClicks,
+            totalBehaviorEmails: totalBehaviorEmails,
+            // Rates
+            openRate: recipient.manualEmails && recipient.manualEmails.length > 0 ? (totalOpens / recipient.manualEmails.length * 100).toFixed(1) : 0,
+            clickRate: recipient.manualEmails && recipient.manualEmails.length > 0 ? (totalClicks / recipient.manualEmails.length * 100).toFixed(1) : 0,
+            // Detailed email history
+            manualEmails: recipient.manualEmails ? recipient.manualEmails.map(me => ({
+              sentAt: me.sentAt,
+              timeDelayEmailSent: me.timeDelayEmailSent,
+              idleEmailSent: me.idleEmailSent,
+              hasLinks: me.hasLinks,
+              openFollowUpSent: me.openFollowUpSent || false,
+              clickFollowUpSent: me.clickFollowUpSent || false,
+              opened: me.opened || false,
+              clicked: me.clicked || false,
+              openedAt: me.openedAt,
+              clickedAt: me.clickedAt
+            })) : []
+          };
+        })
       };
 
+      console.log(`📊 Final analytics object:`, analytics);
       return analytics;
     } catch (error) {
       console.error('❌ Error getting campaign analytics:', error);
@@ -644,7 +705,9 @@ class EmailCampaignEngine {
             idleEmailSent: false,
             hasLinks: hasLinks,
             openFollowUpSent: false,
-            clickFollowUpSent: false
+            clickFollowUpSent: false,
+            opened: false,
+            clicked: false
           });
           
           console.log(`📧 Added manual email entry for ${email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
