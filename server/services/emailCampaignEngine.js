@@ -133,9 +133,15 @@ class EmailCampaignEngine {
         if (behavior === 'open') {
           latestEmail.opened = true;
           console.log(`📧 Marked latest email as opened for ${userEmail}`);
+          
+          // Update campaign analytics
+          campaign.analytics.totalOpens = (campaign.analytics.totalOpens || 0) + 1;
         } else if (behavior === 'click') {
           latestEmail.clicked = true;
           console.log(`📧 Marked latest email as clicked for ${userEmail}`);
+          
+          // Update campaign analytics
+          campaign.analytics.totalClicks = (campaign.analytics.totalClicks || 0) + 1;
         } else if (behavior === 'purchase') {
           latestEmail.purchased = true;
           latestEmail.purchasedAt = new Date();
@@ -297,8 +303,8 @@ class EmailCampaignEngine {
         timeDelayEmailsSent: campaign.analytics.timeDelayEmailsSent || 0,
         idleEmailsSent: campaign.analytics.idleEmailsSent || 0,
         // Calculate rates
-        openRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalOpens || 0) / campaign.analytics.totalSent * 100).toFixed(1) : 0,
-        clickRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalClicks || 0) / campaign.analytics.totalSent * 100).toFixed(1) : 0,
+        openRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalOpens || 0) / campaign.analytics.totalSent * 100).toFixed(1) : '0.0',
+        clickRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalClicks || 0) / campaign.analytics.totalSent * 100).toFixed(1) : '0.0',
         recipients: campaign.recipients.map(recipient => {
           console.log(`📊 Processing recipient: ${recipient.email}`);
           console.log(`📊 Manual emails:`, recipient.manualEmails);
@@ -569,6 +575,9 @@ class EmailCampaignEngine {
           
           sentCount++;
           console.log(`✅ Manual email sent to ${email}`);
+          
+          // Update campaign analytics
+          campaign.analytics.totalSent = (campaign.analytics.totalSent || 0) + 1;
           
         } catch (error) {
           console.error(`❌ Failed to send manual email to ${email}:`, error);

@@ -1047,6 +1047,9 @@ router.post('/:id/send-purchase-campaign', auth, async (req, res) => {
 
         sentCount++;
         console.log(`✅ Purchase email sent to ${recipient.email}`);
+        
+        // Update campaign analytics
+        campaign.analytics.totalSent = (campaign.analytics.totalSent || 0) + 1;
 
       } catch (error) {
         console.error(`❌ Failed to send purchase email to ${recipient.email}:`, error);

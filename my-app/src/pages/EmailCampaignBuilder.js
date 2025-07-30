@@ -454,61 +454,7 @@ const EmailCampaignBuilder = () => {
           </Card>
         </Grid>
 
-        {/* Purchase Email Template */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                📧 Purchase Email Template
-              </Typography>
-              
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                This template will be used for purchase campaign emails. The purchase button will be automatically added.
-              </Typography>
-              
 
-              
-              <TextField
-                fullWidth
-                label="Subject"
-                value={campaign.emailTemplate.subject}
-                onChange={(e) => setCampaign({
-                  ...campaign,
-                  emailTemplate: { ...campaign.emailTemplate, subject: e.target.value }
-                })}
-                sx={{ mb: 2 }}
-              />
-              
-              <TextField
-                id="email-body"
-                fullWidth
-                multiline
-                rows={8}
-                label="Email Body"
-                value={campaign.emailTemplate.body}
-                onChange={(e) => setCampaign({
-                  ...campaign,
-                  emailTemplate: { ...campaign.emailTemplate, body: e.target.value }
-                })}
-                placeholder="Write your email content here..."
-              />
-              
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Sender Name"
-                    value={campaign.emailTemplate?.senderName || ''}
-                    onChange={(e) => setCampaign({
-                      ...campaign,
-                      emailTemplate: { ...campaign.emailTemplate, senderName: e.target.value }
-                    })}
-                  />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
 
         {/* Time Delay Trigger */}
         <Grid item xs={12} md={6}>
@@ -637,7 +583,7 @@ const EmailCampaignBuilder = () => {
                 Configure automatic follow-up emails based on user behavior with purchase campaigns. Idle triggers are especially useful for purchase campaigns.
               </Typography>
               
-              {['open', 'click', 'idle', 'purchase', 'abandonment'].map(behavior => {
+                              {['open', 'click', 'idle'].map(behavior => {
                 const existingTrigger = campaign.behaviorTriggers?.find(t => t.behavior === behavior);
                 
                 return (
@@ -660,7 +606,7 @@ const EmailCampaignBuilder = () => {
                               behavior,
                               enabled: true,
                               idleTime: { enabled: false, minutes: 30 },
-                              purchaseThreshold: { enabled: false, amount: 0, currency: 'USD' },
+      
                               followUpEmail: { subject: '', body: '' }
                             });
                           }
@@ -747,103 +693,7 @@ const EmailCampaignBuilder = () => {
                           </Box>
                         )}
 
-                        {/* Purchase Threshold Configuration - Only for 'purchase' behavior */}
-                        {behavior === 'purchase' && (
-                          <Box mb={2} p={2} bgcolor="grey.50" borderRadius={1}>
-                            <Typography variant="subtitle2" gutterBottom>
-                              Purchase Threshold Configuration
-                            </Typography>
-                            <Box display="flex" alignItems="center" gap={2}>
-                              <FormControl size="small">
-                                <InputLabel>Threshold</InputLabel>
-                                <Select
-                                  value={existingTrigger.purchaseThreshold?.enabled ? 'enabled' : 'disabled'}
-                                  onChange={(e) => {
-                                    const updatedTriggers = campaign.behaviorTriggers.map(t =>
-                                      t.behavior === behavior
-                                        ? {
-                                            ...t,
-                                            purchaseThreshold: {
-                                              ...t.purchaseThreshold,
-                                              enabled: e.target.value === 'enabled'
-                                            }
-                                          }
-                                        : t
-                                    );
-                                    setCampaign({
-                                      ...campaign,
-                                      behaviorTriggers: updatedTriggers
-                                    });
-                                  }}
-                                  label="Threshold"
-                                >
-                                  <MenuItem value="disabled">No Threshold</MenuItem>
-                                  <MenuItem value="enabled">Minimum Amount</MenuItem>
-                                </Select>
-                              </FormControl>
-                              
-                              {existingTrigger.purchaseThreshold?.enabled && (
-                                <>
-                                  <TextField
-                                    size="small"
-                                    type="number"
-                                    label="Amount"
-                                    value={existingTrigger.purchaseThreshold?.amount || 0}
-                                    onChange={(e) => {
-                                      const updatedTriggers = campaign.behaviorTriggers.map(t =>
-                                        t.behavior === behavior
-                                          ? {
-                                              ...t,
-                                              purchaseThreshold: {
-                                                ...t.purchaseThreshold,
-                                                amount: parseFloat(e.target.value) || 0
-                                              }
-                                            }
-                                          : t
-                                      );
-                                      setCampaign({
-                                        ...campaign,
-                                        behaviorTriggers: updatedTriggers
-                                      });
-                                    }}
-                                    sx={{ width: 120 }}
-                                    inputProps={{ min: 0, step: 0.01 }}
-                                  />
-                                  <FormControl size="small" sx={{ width: 80 }}>
-                                    <Select
-                                      value={existingTrigger.purchaseThreshold?.currency || 'USD'}
-                                      onChange={(e) => {
-                                        const updatedTriggers = campaign.behaviorTriggers.map(t =>
-                                          t.behavior === behavior
-                                            ? {
-                                                ...t,
-                                                purchaseThreshold: {
-                                                  ...t.purchaseThreshold,
-                                                  currency: e.target.value
-                                                }
-                                              }
-                                            : t
-                                        );
-                                        setCampaign({
-                                          ...campaign,
-                                          behaviorTriggers: updatedTriggers
-                                        });
-                                      }}
-                                    >
-                                      <MenuItem value="USD">USD</MenuItem>
-                                      <MenuItem value="EUR">EUR</MenuItem>
-                                      <MenuItem value="GBP">GBP</MenuItem>
-                                      <MenuItem value="INR">INR</MenuItem>
-                                    </Select>
-                                  </FormControl>
-                                </>
-                              )}
-                            </Box>
-                            <Typography variant="caption" color="text.secondary">
-                              Only trigger if purchase amount meets minimum threshold
-                            </Typography>
-                          </Box>
-                        )}
+
                         
                         <TextField
                           fullWidth
@@ -1025,7 +875,7 @@ const EmailCampaignBuilder = () => {
                         <MenuItem value="none">No Purchase Campaign</MenuItem>
                         <MenuItem value="all">Send to All Recipients</MenuItem>
                         <MenuItem value="selected">Send to Selected Recipients</MenuItem>
-                        <MenuItem value="filtered">Send to Filtered Recipients</MenuItem>
+                        {/* <MenuItem value="filtered">Send to Filtered Recipients</MenuItem> */}
                       </Select>
                     </FormControl>
 
@@ -1222,7 +1072,7 @@ const EmailCampaignBuilder = () => {
                       </Box>
                     )}
 
-                    {campaign.purchaseCampaignType !== 'none' && (
+                    {/* {campaign.purchaseCampaignType !== 'none' && (
                       <>
                         <Button
                           variant="outlined"
@@ -1250,7 +1100,7 @@ const EmailCampaignBuilder = () => {
                         
 
                       </>
-                    )}
+                    )} */}
                   </Box>
                 </Grid>
               </Grid>

@@ -328,36 +328,7 @@ const CampaignAnalytics = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
-              <Typography variant="h3" color="success.main" gutterBottom>
-                {analytics.totalPurchases || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Purchases
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                ${analytics.totalRevenue || 0} Revenue
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent>
-              <Typography variant="h3" color="error.main" gutterBottom>
-                {analytics.totalAbandonments || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Abandonments
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                ${analytics.abandonmentRate || 0}% Rate
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+
         <Grid item xs={12} sm={6} md={2}>
           <Card>
             <CardContent>
@@ -438,14 +409,10 @@ const CampaignAnalytics = () => {
                   <TableCell>Opens</TableCell>
                   <TableCell>Clicks</TableCell>
                   <TableCell>Purchases</TableCell>
-                  <TableCell>Revenue</TableCell>
-                  <TableCell>Abandonments</TableCell>
-                  <TableCell>Time Spent</TableCell>
                   <TableCell>Follow-ups</TableCell>
                   <TableCell>Idle Emails</TableCell>
                   <TableCell>Open Rate</TableCell>
                   <TableCell>Click Rate</TableCell>
-                  <TableCell>Last Activity</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -484,21 +451,7 @@ const CampaignAnalytics = () => {
                         {recipient.totalPurchases || 0}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="success.main" fontWeight="medium">
-                        ${recipient.totalRevenue || 0}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="error.main" fontWeight="medium">
-                        {recipient.totalAbandonments || 0}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="warning.main" fontWeight="medium">
-                        {recipient.avgTimeSpent || 0}s
-                      </Typography>
-                    </TableCell>
+
                     <TableCell>
                       <Typography variant="body2" color="info.main" fontWeight="medium">
                         {recipient.followUpsSent || 0}
@@ -519,14 +472,7 @@ const CampaignAnalytics = () => {
                         {recipient.clickRate || 0}%
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {recipient.lastActivity 
-                          ? formatTimeAgo(recipient.lastActivity)
-                          : 'No activity'
-                        }
-                      </Typography>
-                    </TableCell>
+
                   </TableRow>
                 ))}
               </TableBody>
