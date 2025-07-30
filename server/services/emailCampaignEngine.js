@@ -49,9 +49,7 @@ class EmailCampaignEngine {
             hasLinks: hasLinks,
             timeDelayEmailSent: false,
             idleEmailSent: false,
-            openFollowUpSent: false,
             clickFollowUpSent: false,
-            opened: false,
             clicked: false,
             purchasePageVisited: false
           });
@@ -124,7 +122,7 @@ class EmailCampaignEngine {
     }
   }
 
-  // Handle user behavior (open, click, purchase, etc.)
+  // Handle user behavior (click, purchase, etc.)
   async handleUserBehavior(campaignId, userEmail, behavior, additionalData = {}) {
     try {
       console.log(`📊 Handling user behavior: ${behavior} for ${userEmail} in campaign ${campaignId}`);
@@ -142,17 +140,7 @@ class EmailCampaignEngine {
       if (recipient.manualEmails && recipient.manualEmails.length > 0) {
         const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
         
-        if (behavior === 'open') {
-          if (!latestEmail.opened) {
-            latestEmail.opened = true;
-            console.log(`📧 First time marking email as opened for ${userEmail}`);
-            
-            // Update campaign analytics
-            campaign.analytics.totalOpens = (campaign.analytics.totalOpens || 0) + 1;
-          } else {
-            console.log(`⏭️ Email already marked as opened for ${userEmail}, skipping duplicate`);
-          }
-        } else if (behavior === 'click') {
+        if (behavior === 'click') {
           if (!latestEmail.clicked) {
             latestEmail.clicked = true;
             console.log(`📧 First time marking email as clicked for ${userEmail}`);
@@ -239,9 +227,7 @@ class EmailCampaignEngine {
       const recipient = campaign.recipients.find(r => r.email === userEmail);
       if (recipient && recipient.manualEmails && recipient.manualEmails.length > 0) {
         const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
-        if (behavior === 'open') {
-          latestEmail.openFollowUpSent = true;
-        } else if (behavior === 'click') {
+        if (behavior === 'click') {
           latestEmail.clickFollowUpSent = true;
         }
       }
@@ -330,7 +316,7 @@ class EmailCampaignEngine {
           behaviorTriggers: campaign.behaviorTriggers
         },
         totalSent: campaign.analytics.totalSent || 0,
-        totalOpens: campaign.analytics.totalOpens || 0,
+
         totalClicks: campaign.analytics.totalClicks || 0,
         totalPurchases: campaign.analytics.totalPurchases || 0,
         totalRevenue: campaign.analytics.totalRevenue || 0,
@@ -339,7 +325,7 @@ class EmailCampaignEngine {
         timeDelayEmailsSent: campaign.analytics.timeDelayEmailsSent || 0,
         idleEmailsSent: campaign.analytics.idleEmailsSent || 0,
         // Calculate rates
-        openRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalOpens || 0) / campaign.analytics.totalSent * 100).toFixed(1) : '0.0',
+
         clickRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalClicks || 0) / campaign.analytics.totalSent * 100).toFixed(1) : '0.0',
         recipients: campaign.recipients.map(recipient => {
           console.log(`📊 Processing recipient: ${recipient.email}`);
@@ -348,16 +334,15 @@ class EmailCampaignEngine {
           // Calculate recipient-specific analytics
           const totalFollowUps = recipient.manualEmails ? recipient.manualEmails.filter(me => me.timeDelayEmailSent).length : 0;
           const totalIdleEmails = recipient.manualEmails ? recipient.manualEmails.filter(me => me.idleEmailSent).length : 0;
-          const totalOpenFollowUps = recipient.manualEmails ? recipient.manualEmails.filter(me => me.openFollowUpSent).length : 0;
+          
           const totalClickFollowUps = recipient.manualEmails ? recipient.manualEmails.filter(me => me.clickFollowUpSent).length : 0;
           
-          // Track actual opens and clicks
-          const totalOpens = recipient.manualEmails ? recipient.manualEmails.filter(me => me.opened).length : 0;
-          const totalClicks = recipient.manualEmails ? recipient.manualEmails.filter(me => me.clicked).length : 0;
-          const totalPurchases = recipient.manualEmails ? recipient.manualEmails.filter(me => me.purchased).length : 0;
-          const totalBehaviorEmails = totalOpens + totalClicks;
+                     // Track actual clicks
+           const totalClicks = recipient.manualEmails ? recipient.manualEmails.filter(me => me.clicked).length : 0;
+           const totalPurchases = recipient.manualEmails ? recipient.manualEmails.filter(me => me.purchased).length : 0;
+           const totalBehaviorEmails = totalClicks;
           
-          console.log(`📊 ${recipient.email} - Opens: ${totalOpens}, Clicks: ${totalClicks}, Follow-ups: ${totalFollowUps}`);
+                     console.log(`📊 ${recipient.email} - Clicks: ${totalClicks}, Follow-ups: ${totalFollowUps}`);
           
           return {
             email: recipient.email,
@@ -370,12 +355,12 @@ class EmailCampaignEngine {
             idleEmailsSent: totalIdleEmails,
             emailsWithLinks: recipient.manualEmails ? recipient.manualEmails.filter(me => me.hasLinks).length : 0,
             // Behavior tracking
-            totalOpens: totalOpens,
+            
             totalClicks: totalClicks,
             totalPurchases: totalPurchases,
             totalBehaviorEmails: totalBehaviorEmails,
             // Rates
-            openRate: recipient.manualEmails && recipient.manualEmails.length > 0 ? (totalOpens / recipient.manualEmails.length * 100).toFixed(1) : 0,
+            
             clickRate: recipient.manualEmails && recipient.manualEmails.length > 0 ? (totalClicks / recipient.manualEmails.length * 100).toFixed(1) : 0,
             // Detailed email history
             manualEmails: recipient.manualEmails ? recipient.manualEmails.map(me => ({
@@ -383,9 +368,9 @@ class EmailCampaignEngine {
               timeDelayEmailSent: me.timeDelayEmailSent,
               idleEmailSent: me.idleEmailSent,
               hasLinks: me.hasLinks,
-              openFollowUpSent: me.openFollowUpSent || false,
+              
               clickFollowUpSent: me.clickFollowUpSent || false,
-              opened: me.opened || false,
+              
               clicked: me.clicked || false,
               purchased: me.purchased || false,
               purchasedAt: me.purchasedAt,
@@ -602,9 +587,7 @@ class EmailCampaignEngine {
             hasLinks: hasLinks,
             timeDelayEmailSent: false,
             idleEmailSent: false,
-            openFollowUpSent: false,
             clickFollowUpSent: false,
-            opened: false,
             clicked: false,
             purchasePageVisited: false
           });

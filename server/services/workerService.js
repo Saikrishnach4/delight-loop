@@ -170,8 +170,8 @@ class WorkerService {
           return;
         }
       } else {
-        // For regular campaigns, check if user opened/clicked the email
-        if (manualEmail.openFollowUpSent || manualEmail.clickFollowUpSent) {
+               // For regular campaigns, check if user clicked the email
+       if (manualEmail.clickFollowUpSent) {
           console.log(`⏭️ User already interacted for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
           return;
         }
@@ -279,7 +279,7 @@ class WorkerService {
     }
   }
 
-  // Handle user behavior (open, click) - simplified version for workers
+  // Handle user behavior (click) - simplified version for workers
   async handleUserBehavior(campaignId, userEmail, behavior) {
     try {
       console.log(`🎯 Handling user behavior: ${behavior} for ${userEmail} in campaign ${campaignId}`);
@@ -306,16 +306,7 @@ class WorkerService {
       recipient.lastActivity = new Date();
 
       // Mark the behavior as occurred (only if not already marked)
-      if (behavior === 'open') {
-        if (!latestManualEmail.opened) {
-          latestManualEmail.opened = true;
-          latestManualEmail.openedAt = new Date();
-          campaign.analytics.totalOpens += 1;
-          console.log(`📧 First time marking email as opened for ${userEmail}`);
-        } else {
-          console.log(`⏭️ Email already marked as opened for ${userEmail}, skipping duplicate`);
-        }
-      } else if (behavior === 'click') {
+      if (behavior === 'click') {
         if (!latestManualEmail.clicked) {
           latestManualEmail.clicked = true;
           latestManualEmail.clickedAt = new Date();
@@ -355,8 +346,7 @@ class WorkerService {
         const trigger = behaviorTriggers[0];
         
         // Check if follow-up already sent
-        if ((behavior === 'open' && latestManualEmail.openFollowUpSent) ||
-            (behavior === 'click' && latestManualEmail.clickFollowUpSent) ||
+        if ((behavior === 'click' && latestManualEmail.clickFollowUpSent) ||
             (behavior === 'purchase' && latestManualEmail.purchaseFollowUpSent)) {
           console.log(`⏭️ ${behavior} follow-up already sent for ${userEmail}`);
           await campaign.save();
@@ -371,9 +361,7 @@ class WorkerService {
         });
         
         // Mark follow-up as sent
-        if (behavior === 'open') {
-          latestManualEmail.openFollowUpSent = true;
-        } else if (behavior === 'click') {
+        if (behavior === 'click') {
           latestManualEmail.clickFollowUpSent = true;
         } else if (behavior === 'purchase') {
           latestManualEmail.purchaseFollowUpSent = true;

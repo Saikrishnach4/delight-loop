@@ -162,7 +162,7 @@ router.post('/:id/send', auth, async (req, res) => {
   }
 });
 
-// Handle user behavior (open, click, idle)
+// Handle user behavior (click, idle)
 router.post('/:id/behavior', async (req, res) => {
   try {
     const { userEmail, behavior } = req.body;
@@ -171,8 +171,8 @@ router.post('/:id/behavior', async (req, res) => {
       return res.status(400).json({ error: 'userEmail and behavior are required' });
     }
     
-    if (!['open', 'click', 'idle'].includes(behavior)) {
-      return res.status(400).json({ error: 'behavior must be open, click, or idle' });
+    if (!['click', 'idle'].includes(behavior)) {
+      return res.status(400).json({ error: 'behavior must be click or idle' });
     }
     
     const result = await emailCampaignEngine.handleUserBehavior(req.params.id, userEmail, behavior);
@@ -202,8 +202,8 @@ router.post('/:id/test-behavior', auth, async (req, res) => {
       return res.status(400).json({ error: 'userEmail and behavior are required' });
     }
     
-    if (!['open', 'click', 'idle'].includes(behavior)) {
-      return res.status(400).json({ error: 'behavior must be open, click, or idle' });
+    if (!['click', 'idle'].includes(behavior)) {
+      return res.status(400).json({ error: 'behavior must be click or idle' });
     }
     
     const result = await emailCampaignEngine.testBehaviorTrigger(req.params.id, userEmail, behavior);
@@ -383,88 +383,9 @@ router.get('/test-config/:campaignId', auth, async (req, res) => {
   }
 });
 
-// Test open behavior manually (for debugging)
-router.post('/:id/test-open/:userEmail', auth, async (req, res) => {
-  try {
-    const { id, userEmail } = req.params;
-    const decodedEmail = decodeURIComponent(userEmail);
-    
-    console.log('🧪 MANUAL OPEN TEST:');
-    console.log(`📧 Campaign ID: ${id}`);
-    console.log(`📧 User Email: ${decodedEmail}`);
-    
-    const result = await emailCampaignEngine.handleUserBehavior(id, decodedEmail, 'open');
-    
-    res.json({
-      success: result.success,
-      message: result.message,
-      followUpSent: result.followUpSent,
-      behavior: 'open',
-      userEmail: decodedEmail
-    });
-  } catch (error) {
-    console.error('Error testing open behavior:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+
 
 // Automatic tracking endpoints (no authentication required)
-// Track email opens
-router.get('/track/open/:campaignId/:userEmail', async (req, res) => {
-  try {
-    const { campaignId, userEmail } = req.params;
-    const decodedEmail = decodeURIComponent(userEmail);
-    
-    console.log('🔍 OPEN TRACKING CALLED:');
-    console.log(`📧 Campaign ID: ${campaignId}`);
-    console.log(`📧 User Email: ${decodedEmail}`);
-    console.log(`📧 Full URL: ${req.originalUrl}`);
-    
-    // Check if campaign exists and has open behavior trigger
-    const campaign = await EmailCampaign.findById(campaignId);
-    if (!campaign) {
-      console.log(`❌ Campaign ${campaignId} not found`);
-    } else {
-      console.log(`📧 Campaign found: ${campaign.name}`);
-      console.log(`📧 Campaign status: ${campaign.status}`);
-      console.log(`📧 Behavior triggers:`, campaign.behaviorTriggers);
-      
-      const openTrigger = campaign.behaviorTriggers.find(t => t.behavior === 'open' && t.enabled);
-      if (openTrigger) {
-        console.log(`✅ Open behavior trigger found:`, openTrigger);
-        console.log(`📧 Open-up email subject: ${openTrigger.followUpEmail?.subject}`);
-      } else {
-        console.log(`⚠️ No enabled open behavior trigger found`);
-      }
-    }
-    
-    // Automatically trigger open behavior
-    const result = await emailCampaignEngine.handleUserBehavior(campaignId, decodedEmail, 'open');
-    
-    console.log(`📧 Behavior result:`, result);
-    
-    if (result.success) {
-      console.log(`✅ Open behavior processed for ${decodedEmail}`);
-      if (result.followUpSent) {
-        console.log(`📧 Follow-up email sent for open behavior to ${decodedEmail}`);
-      } else {
-        console.log(`⚠️ No follow-up email configured for open behavior`);
-      }
-    } else {
-      console.log(`❌ Open behavior failed: ${result.message}`);
-    }
-    
-    // Return a 1x1 transparent pixel
-    res.set('Content-Type', 'image/png');
-    res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
-    
-  } catch (error) {
-    console.error('❌ Error tracking email open:', error);
-    // Still return the pixel even if there's an error
-    res.set('Content-Type', 'image/png');
-    res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
-  }
-});
 
 // Track purchase page visits (for idle tracking)
 router.get('/track/purchase-page-visit/:campaignId/:userEmail', async (req, res) => {
@@ -533,10 +454,10 @@ router.get('/track/click/:campaignId/:userEmail', async (req, res) => {
   }
 });
 
-// Test endpoint to simulate opens, clicks, and purchases for debugging
+// Test endpoint to simulate clicks and purchases for debugging
 router.post('/:id/test-interactions', auth, async (req, res) => {
   try {
-    const { recipientEmail, action, purchaseAmount, purchaseCurrency } = req.body; // action can be 'open', 'click', or 'purchase'
+    const { recipientEmail, action, purchaseAmount, purchaseCurrency } = req.body; // action can be 'click' or 'purchase'
     
     console.log(`🧪 Testing ${action} for ${recipientEmail} in campaign ${req.params.id}`);
     
@@ -1126,7 +1047,7 @@ router.post('/:id/send-purchase-campaign', auth, async (req, res) => {
           if (idleTriggers.length > 0) {
             const idleTrigger = idleTriggers[0];
             console.log(`⏰ Idle trigger configured: ${idleTrigger.idleTime.minutes} minutes for ${recipient.email}`);
-            console.log(`⏰ If user doesn't open/click within ${idleTrigger.idleTime.minutes} minutes, idle reminder will be sent`);
+            console.log(`⏰ If user doesn't click within ${idleTrigger.idleTime.minutes} minutes, idle reminder will be sent`);
           } else {
             console.log(`⚠️ No idle trigger configured for ${recipient.email} - no idle reminders will be sent`);
           }
@@ -1151,7 +1072,7 @@ router.post('/:id/send-purchase-campaign', auth, async (req, res) => {
       console.log(`   ⏰ Idle time: ${idleTriggers[0].idleTime.minutes} minutes`);
     }
     console.log(`   ⏰ Time delay triggers: ${timeDelayTriggers ? 'Yes' : 'No'}`);
-    console.log(`   🎯 Next: Users will receive idle reminders if they don't open/click within the configured time`);
+            console.log(`   🎯 Next: Users will receive idle reminders if they don't click within the configured time`);
 
     res.json({
       success: true,
@@ -1178,10 +1099,7 @@ async function getFilteredRecipients(campaign) {
   const recipients = campaign.recipients.filter(r => r.status === 'active');
 
   switch (filter.type) {
-    case 'opens':
-      return recipients.filter(r => 
-        r.manualEmails && r.manualEmails.some(email => email.opened)
-      );
+
 
     case 'clicks':
       return recipients.filter(r => 
@@ -1195,7 +1113,7 @@ async function getFilteredRecipients(campaign) {
 
     case 'inactive':
       return recipients.filter(r => 
-        !r.manualEmails || r.manualEmails.every(email => !email.opened && !email.clicked)
+        !r.manualEmails || r.manualEmails.every(email => !email.clicked)
       );
 
     case 'new':

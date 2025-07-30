@@ -110,7 +110,7 @@ class EmailService {
       // Use environment variable or default to Render domain
       const trackingBaseUrl = baseUrl || process.env.BASE_URL || 'https://delight-loop.onrender.com';
       const encodedEmail = encodeURIComponent(userEmail);
-      const trackingPixelUrl = `${trackingBaseUrl}/api/campaigns/track/open/${campaignId}/${encodedEmail}`;
+
       const clickTrackingUrl = `${trackingBaseUrl}/api/campaigns/track/click/${campaignId}/${encodedEmail}`;
       const purchaseUrl = `${trackingBaseUrl}/api/campaigns/purchase/${campaignId}/${encodedEmail}`;
       
@@ -121,7 +121,7 @@ class EmailService {
       console.log(`📧 Email Content Preview: ${typeof emailContent === 'string' ? emailContent.substring(0, 100) : JSON.stringify(emailContent).substring(0, 100)}`);
       console.log(`📧 BASE_URL from env: ${process.env.BASE_URL || 'NOT SET'}`);
       console.log(`📧 Using tracking base URL: ${trackingBaseUrl}`);
-      console.log(`📧 Tracking URL: ${trackingPixelUrl}`);
+
       console.log(`📧 Click Tracking URL: ${clickTrackingUrl}`);
       console.log(`📧 Purchase URL: ${purchaseUrl}`);
       
@@ -149,17 +149,7 @@ class EmailService {
         throw new Error('Email content must be a string');
       }
       
-      // Add tracking pixel at the end of the email
-      const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
-      
-      // Add tracking pixel to HTML content
-      if (!htmlContent.includes('</body>')) {
-        htmlContent += trackingPixel;
-        console.log('📧 Added tracking pixel to end of content (no </body> tag)');
-      } else {
-        htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`);
-        console.log('📧 Added tracking pixel before </body> tag');
-      }
+
       
       console.log(`📧 Final HTML content length: ${htmlContent.length}`);
       console.log(`📧 HTML content preview: ${htmlContent.substring(0, 200)}...`);

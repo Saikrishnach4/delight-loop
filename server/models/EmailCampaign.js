@@ -31,7 +31,7 @@ const emailCampaignSchema = new mongoose.Schema({
   behaviorTriggers: [{
     behavior: {
       type: String,
-      enum: ['open', 'click', 'idle', 'purchase', 'abandonment'],
+      enum: ['click', 'idle', 'purchase', 'abandonment'],
       required: true
     },
     enabled: { type: Boolean, default: true },
@@ -58,13 +58,10 @@ const emailCampaignSchema = new mongoose.Schema({
       timeDelayEmailSent: { type: Boolean, default: false },
       idleEmailSent: { type: Boolean, default: false },
       hasLinks: { type: Boolean, default: false }, // Track if email contains clickable links
-      openFollowUpSent: { type: Boolean, default: false }, // Track if open follow-up was sent
       clickFollowUpSent: { type: Boolean, default: false }, // Track if click follow-up was sent
       purchaseFollowUpSent: { type: Boolean, default: false }, // Track if purchase follow-up was sent
-      opened: { type: Boolean, default: false }, // Track if email was actually opened
       clicked: { type: Boolean, default: false }, // Track if email was actually clicked
       purchased: { type: Boolean, default: false }, // Track if purchase was made
-      openedAt: Date, // When the email was opened
       clickedAt: Date, // When the email was clicked
       purchasedAt: Date, // When the purchase was made
       purchaseAmount: { type: Number, default: 0 }, // Purchase amount
@@ -87,7 +84,7 @@ const emailCampaignSchema = new mongoose.Schema({
   }],
   analytics: {
     totalSent: { type: Number, default: 0 },
-    totalOpens: { type: Number, default: 0 },
+
     totalClicks: { type: Number, default: 0 },
     totalPurchases: { type: Number, default: 0 },
     totalRevenue: { type: Number, default: 0 },
@@ -122,8 +119,8 @@ const emailCampaignSchema = new mongoose.Schema({
   purchaseFilter: {
     type: {
       type: String,
-      enum: ['opens', 'clicks', 'purchases', 'inactive', 'new'],
-      default: 'opens'
+      enum: ['clicks', 'purchases', 'inactive', 'new'],
+      default: 'clicks'
     },
     threshold: { type: Number, default: 1 }
   },

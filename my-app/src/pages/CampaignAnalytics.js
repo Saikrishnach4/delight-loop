@@ -154,40 +154,6 @@ const CampaignAnalytics = () => {
           >
             Test Purchase ($99.99)
           </Button>
-          {/* <Button
-            variant="contained"
-            onClick={() => {
-              console.log('📊 Current analytics state:', analytics);
-              console.log('📊 Current campaign state:', campaign);
-            }}
-            sx={{ mr: 2 }}
-          >
-            Debug Data
-          </Button>
-          <Button
-            variant="outlined"
-            color="secondary"
-            onClick={async () => {
-              if (analytics?.recipients?.[0]?.email) {
-                try {
-                  const response = await apiClient.post(`/api/campaigns/${campaignId}/test-interactions`, {
-                    recipientEmail: analytics.recipients[0].email,
-                    action: 'open'
-                  });
-                  const result = response.data;
-                  console.log('🧪 Test open result:', result);
-                  if (result.success) {
-                    fetchAnalytics(); // Refresh analytics
-                  }
-                } catch (error) {
-                  console.error('❌ Test open failed:', error);
-                }
-              }
-            }}
-            sx={{ mr: 1 }}
-          >
-            Test Open
-          </Button>
           <Button
             variant="outlined"
             color="warning"
@@ -210,7 +176,7 @@ const CampaignAnalytics = () => {
             }}
           >
             Test Click
-          </Button> */}
+          </Button>
         </Box>
       </Box>
 
@@ -378,12 +344,10 @@ const CampaignAnalytics = () => {
                   <TableCell>Name</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Manual Emails</TableCell>
-                  <TableCell>Opens</TableCell>
                   <TableCell>Clicks</TableCell>
                   <TableCell>Purchases</TableCell>
                   <TableCell>Follow-ups</TableCell>
                   <TableCell>Idle Emails</TableCell>
-                  <TableCell>Open Rate</TableCell>
                   <TableCell>Click Rate</TableCell>
                 </TableRow>
               </TableHead>
@@ -408,11 +372,7 @@ const CampaignAnalytics = () => {
                         {recipient.manualEmailsCount || 0}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="secondary" fontWeight="medium">
-                        {recipient.totalOpens || 0}
-                      </Typography>
-                    </TableCell>
+
                     <TableCell>
                       <Typography variant="body2" color="warning.main" fontWeight="medium">
                         {recipient.totalClicks || 0}
@@ -434,11 +394,7 @@ const CampaignAnalytics = () => {
                         {recipient.idleEmailsSent || 0}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="secondary">
-                        {recipient.openRate || 0}%
-                      </Typography>
-                    </TableCell>
+
                     <TableCell>
                       <Typography variant="body2" color="warning.main">
                         {recipient.clickRate || 0}%
