@@ -752,6 +752,52 @@ router.get('/:id/analytics', auth, async (req, res) => {
   }
 });
 
+// Test email sending (for debugging)
+router.post('/test-email', auth, async (req, res) => {
+  try {
+    const { to, subject, body } = req.body;
+    
+    if (!to || !subject || !body) {
+      return res.status(400).json({ error: 'To, subject, and body are required' });
+    }
+    
+    const emailService = require('../services/emailService');
+    const result = await emailService.sendEmail({ to, subject, body });
+    
+    res.json({ 
+      success: true,
+      message: 'Test email sent successfully', 
+      messageId: result.messageId 
+    });
+  } catch (error) {
+    console.error('Error sending test email:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test behavior triggers (for debugging)
+router.post('/test-behavior-triggers', auth, async (req, res) => {
+  try {
+    const { campaignId, userEmail, behavior } = req.body;
+    
+    if (!campaignId || !userEmail || !behavior) {
+      return res.status(400).json({ error: 'Campaign ID, user email, and behavior are required' });
+    }
+    
+    const emailCampaignEngine = require('../services/emailCampaignEngine');
+    const result = await emailCampaignEngine.handleUserBehavior(campaignId, userEmail, behavior);
+    
+    res.json({ 
+      success: true,
+      message: 'Behavior trigger test completed', 
+      result 
+    });
+  } catch (error) {
+    console.error('Error testing behavior triggers:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Test worker processing (for debugging)
 router.post('/test-worker', auth, async (req, res) => {
   try {

@@ -102,7 +102,14 @@ class EmailCampaignEngine {
       );
       
       // Send email
-      await emailService.sendEmail(recipientEmail, emailWithTracking.subject, emailWithTracking.body);
+      await emailService.sendEmail({
+        to: recipientEmail,
+        subject: emailWithTracking.subject,
+        body: emailWithTracking.body
+      });
+      
+      // Update campaign analytics for follow-up emails
+      campaign.analytics.totalSent = (campaign.analytics.totalSent || 0) + 1;
       
       console.log(`✅ Single email sent to ${recipientEmail}`);
       
@@ -183,18 +190,22 @@ class EmailCampaignEngine {
   async checkBehaviorTriggers(campaign, userEmail, behavior) {
     try {
       console.log(`🔍 Checking behavior triggers for ${behavior} from ${userEmail}`);
+      console.log(`📋 Campaign behavior triggers:`, campaign.behaviorTriggers);
       
       const behaviorTriggers = campaign.behaviorTriggers.filter(t => 
         t.behavior === behavior && t.enabled && t.followUpEmail
       );
       
+      console.log(`🔍 Filtered triggers for ${behavior}:`, behaviorTriggers);
+      
       if (behaviorTriggers.length === 0) {
         console.log(`⏭️ No enabled ${behavior} triggers found`);
+        console.log(`📋 Available behaviors:`, campaign.behaviorTriggers.map(t => ({ behavior: t.behavior, enabled: t.enabled, hasFollowUp: !!t.followUpEmail })));
         return { followUpSent: false };
       }
       
       const trigger = behaviorTriggers[0]; // Use first matching trigger
-      console.log(`✅ Found ${behavior} trigger with follow-up email`);
+      console.log(`✅ Found ${behavior} trigger with follow-up email:`, trigger);
       
       // Send follow-up email
       await this.sendSingleEmail(campaign, userEmail, trigger.followUpEmail);
