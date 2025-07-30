@@ -22,7 +22,11 @@ import {
   Divider,
   Chip,
   Alert,
-  Snackbar
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Palette as PaletteIcon,
