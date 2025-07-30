@@ -1,14 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
+  Card,
+  CardContent,
   Typography,
-  IconButton,
-  Tooltip,
+  CardMedia
 } from '@mui/material';
-import {
-  Image as ImageIcon,
-  Edit as EditIcon,
-} from '@mui/icons-material';
 
 const ImageWidget = ({ widget, onUpdate }) => {
   const [imageError, setImageError] = useState(false);

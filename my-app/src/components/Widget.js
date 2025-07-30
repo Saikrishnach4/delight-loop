@@ -52,13 +52,15 @@ const Widget = ({ widget, theme, onSelect, onUpdate, onDelete, isSelected }) => 
   };
 
   const handleDuplicate = () => {
-    handleMenuClose();
-    const duplicatedWidget = {
+    const newWidget = {
       ...widget,
       id: `widget-${Date.now()}`,
-      config: { ...widget.config, title: `${widget.config.title} (Copy)` }
+      title: `${widget.title} (Copy)`,
+      position: { x: widget.position.x + 50, y: widget.position.y + 50 }
     };
-    // This would need to be handled by the parent component
+    
+    // Add to dashboard
+    onAddWidget(newWidget);
   };
 
   const handleConfigUpdate = (updates) => {

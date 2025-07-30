@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Paper,
@@ -30,7 +30,7 @@ import { useDashboard } from '../../context/DashboardContext';
 import { useAuth } from '../../context/AuthContext';
 
 const CollaborationPanel = () => {
-  const { activeUsers, currentUser, socket, currentDashboard, chatMessages } = useDashboard();
+  const { currentUser, activeUsers, chatMessages, socket, currentDashboard } = useDashboard();
   const { user } = useAuth();
   const [showChat, setShowChat] = useState(false);
   const [activeTab, setActiveTab] = useState(0);

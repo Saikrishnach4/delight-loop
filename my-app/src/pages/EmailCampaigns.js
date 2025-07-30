@@ -25,6 +25,7 @@ import {
   TableRow,
   Paper
 } from '@mui/material';
+import { apiFetch } from '../services/apiService';
 import {
   Add as AddIcon,
   MoreVert as MoreVertIcon,
@@ -72,7 +73,7 @@ const EmailCampaigns = () => {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/campaigns', {
+      const response = await apiFetch('api/campaigns', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -93,7 +94,7 @@ const EmailCampaigns = () => {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch('/api/campaigns/templates/list', {
+      const response = await apiFetch('api/campaigns/templates/list', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -198,7 +199,7 @@ const EmailCampaigns = () => {
     }
 
     try {
-      const response = await fetch(`/api/campaigns/${selectedCampaign._id}`, {
+      const response = await apiFetch(`api/campaigns/${selectedCampaign._id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -218,7 +219,7 @@ const EmailCampaigns = () => {
 
   const handleStatusChange = async (campaignId, newStatus) => {
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
+      const response = await apiFetch(`api/campaigns/${campaignId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

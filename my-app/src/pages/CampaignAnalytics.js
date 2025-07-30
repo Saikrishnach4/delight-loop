@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -16,15 +16,13 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Divider,
   IconButton,
-  Tooltip,
-  TextField,
   Button
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
+import { apiFetch } from '../services/apiService';
 
 const CampaignAnalytics = () => {
   const { campaignId } = useParams();
@@ -34,14 +32,10 @@ const CampaignAnalytics = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [campaignId]);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/campaigns/${campaignId}/analytics`, {
+      const response = await apiFetch(`api/campaigns/${campaignId}/analytics`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -63,7 +57,11 @@ const CampaignAnalytics = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [campaignId]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const getRecipientStatus = (recipient) => {
     if (recipient.status === 'unsubscribed') return 'Unsubscribed';
@@ -114,7 +112,6 @@ const CampaignAnalytics = () => {
 
   const totalRecipients = analytics.recipients?.length || 0;
   const activeRecipients = analytics.recipients?.filter(r => r.status === 'active').length || 0;
-  const totalManualEmails = analytics.recipients?.reduce((sum, r) => sum + (r.manualEmailsCount || 0), 0) || 0;
   const totalFollowUps = analytics.recipients?.reduce((sum, r) => sum + (r.followUpsSent || 0), 0) || 0;
 
   return (
@@ -141,7 +138,7 @@ const CampaignAnalytics = () => {
             onClick={async () => {
               if (analytics?.recipients?.[0]?.email) {
                 try {
-                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
+                  const response = await apiFetch(`api/campaigns/${campaignId}/test-interactions`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -184,7 +181,7 @@ const CampaignAnalytics = () => {
             onClick={async () => {
               if (analytics?.recipients?.[0]?.email) {
                 try {
-                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
+                  const response = await apiFetch(`api/campaigns/${campaignId}/test-interactions`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -215,7 +212,7 @@ const CampaignAnalytics = () => {
             onClick={async () => {
               if (analytics?.recipients?.[0]?.email) {
                 try {
-                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
+                  const response = await apiFetch(`api/campaigns/${campaignId}/test-interactions`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',

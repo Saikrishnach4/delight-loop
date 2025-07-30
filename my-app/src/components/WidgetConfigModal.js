@@ -5,21 +5,21 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Box,
-  Tabs,
-  Tab,
-  Typography,
   TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Box,
+  Typography,
+  Grid,
   Switch,
   FormControlLabel,
-  Grid,
-  Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   IconButton,
-  Slider,
+  Tooltip
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -505,20 +505,26 @@ const WidgetConfigModal = ({ widget, open, onClose, onUpdate }) => {
       </DialogTitle>
 
       <DialogContent>
-        <Tabs
-          value={activeTab}
-          onChange={(e, newValue) => setActiveTab(newValue)}
-          sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-        >
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
           {tabs.map((tab, index) => (
-            <Tab
+            <Button
               key={index}
-              label={tab.label}
-              icon={tab.icon}
-              iconPosition="start"
-            />
+              onClick={() => setActiveTab(index)}
+              startIcon={tab.icon}
+              sx={{
+                mr: 1,
+                borderRadius: 1,
+                borderBottom: activeTab === index ? 2 : 0,
+                borderColor: activeTab === index ? 'primary.main' : 'transparent',
+                '&:hover': {
+                  backgroundColor: 'action.hover',
+                },
+              }}
+            >
+              {tab.label}
+            </Button>
           ))}
-        </Tabs>
+        </Box>
 
         {activeTab === 0 && renderGeneralSettings()}
         {activeTab === 1 && renderWidgetSpecificSettings()}

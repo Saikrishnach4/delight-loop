@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { apiGet, apiPost, apiPut } from '../services/apiService';
 
 const AuthContext = createContext();
 
@@ -66,7 +67,7 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       if (state.token) {
         try {
-          const response = await axios.get('/api/auth/profile');
+          const response = await apiGet('api/auth/profile');
           dispatch({
             type: 'LOGIN_SUCCESS',
             payload: { user: response.data.user, token: state.token },
@@ -86,7 +87,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     dispatch({ type: 'LOGIN_START' });
     try {
-      const response = await axios.post('/api/auth/login', { email, password });
+      const response = await apiPost('api/auth/login', { email, password });
       const { user, token } = response.data;
       
       localStorage.setItem('token', token);
@@ -108,7 +109,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password) => {
     dispatch({ type: 'LOGIN_START' });
     try {
-      const response = await axios.post('/api/auth/register', {
+      const response = await apiPost('api/auth/register', {
         username,
         email,
         password,
@@ -139,7 +140,7 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (updates) => {
     try {
-      const response = await axios.put('/api/auth/profile', updates);
+      const response = await apiPut('api/auth/profile', updates);
       dispatch({
         type: 'UPDATE_USER',
         payload: response.data.user,
@@ -155,7 +156,7 @@ export const AuthProvider = ({ children }) => {
 
   const changePassword = async (currentPassword, newPassword) => {
     try {
-      await axios.put('/api/auth/change-password', {
+      await apiPut('api/auth/change-password', {
         currentPassword,
         newPassword,
       });

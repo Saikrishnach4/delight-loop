@@ -1,30 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Typography,
-  Grid,
   Card,
   CardContent,
-  CardActions,
+  Typography,
+  Grid,
   Button,
-  Chip,
-  IconButton,
-  Tooltip,
+  Fab,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Fab,
+  CircularProgress,
+  Alert,
+  Badge,
+  Tooltip
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  Share as ShareIcon,
-  Visibility as VisibilityIcon,
+  Dashboard as DashboardIcon,
+  Group as GroupIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
@@ -43,27 +41,16 @@ const Dashboard = () => {
   const { requestCollaborationCount } = useDashboard();
 
   // Refresh collaboration counts for all dashboards
-  const refreshCollaborationCounts = () => {
-    dashboards.forEach(dashboard => {
-      requestCollaborationCount(dashboard._id);
-    });
-  };
+  const refreshCollaborationCounts = useCallback(async () => {
+    // This would fetch collaboration counts for all dashboards
+    // For now, we'll just log that it's called
+    console.log('Refreshing collaboration counts');
+  }, []);
 
   useEffect(() => {
     fetchDashboards();
-  }, []);
-
-  // Refresh collaboration counts when dashboards are loaded
-  useEffect(() => {
-    if (dashboards.length > 0) {
-      // Small delay to ensure socket is ready
-      const timer = setTimeout(() => {
-        refreshCollaborationCounts();
-      }, 1000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [dashboards]);
+    refreshCollaborationCounts();
+  }, [fetchDashboards, refreshCollaborationCounts]);
 
   const fetchDashboards = async () => {
     try {
@@ -153,30 +140,12 @@ const Dashboard = () => {
     }
   };
 
-  const handleDeleteDashboard = async (dashboardId) => {
-    if (!window.confirm('Are you sure you want to delete this dashboard?')) {
-      return;
-    }
+  const handleEditDashboard = (dashboard) => {
+    navigate(`/dashboard-builder/${dashboard._id}`);
+  };
 
-    try {
-      const response = await fetch(`/api/dashboards/${dashboardId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        setDashboards(prev => prev.filter(d => d._id !== dashboardId));
-        toast.success('Dashboard deleted successfully!');
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.error || 'Failed to delete dashboard');
-      }
-    } catch (error) {
-      console.error('Error deleting dashboard:', error);
-      toast.error('Error deleting dashboard');
-    }
+  const handleViewDashboard = (dashboard) => {
+    navigate(`/dashboard/${dashboard._id}`);
   };
 
   const formatDate = (dateString) => {
@@ -239,21 +208,21 @@ const Dashboard = () => {
                         
                         return isOwner ? (
                           <Tooltip title="You own this dashboard">
-                            <Chip
-                              label="Owner"
-                              size="small"
+                            <Badge
+                              badgeContent="Owner"
                               color="primary"
-                              variant="outlined"
-                            />
+                            >
+                              <GroupIcon />
+                            </Badge>
                           </Tooltip>
                         ) : isCollaborator ? (
                           <Tooltip title="You collaborate on this dashboard">
-                            <Chip
-                              label="Collaborator"
-                              size="small"
+                            <Badge
+                              badgeContent="Collaborator"
                               color="secondary"
-                              variant="outlined"
-                            />
+                            >
+                              <GroupIcon />
+                            </Badge>
                           </Tooltip>
                         ) : null;
                       })()}
@@ -265,17 +234,18 @@ const Dashboard = () => {
                   </Typography>
                   
                   <Box display="flex" alignItems="center" gap={1} mb={2}>
-                    <Chip
-                      label={`${dashboard.widgets?.length || 0} widgets`}
-                      size="small"
-                      variant="outlined"
-                    />
-                    <Chip
-                      label={`Created by ${dashboard.owner?.username || 'Unknown'}`}
-                      size="small"
+                    <Badge
+                      badgeContent={`${dashboard.widgets?.length || 0} widgets`}
                       color="primary"
-                      variant="outlined"
-                    />
+                    >
+                      <DashboardIcon />
+                    </Badge>
+                    <Badge
+                      badgeContent={`Created by ${dashboard.owner?.username || 'Unknown'}`}
+                      color="info"
+                    >
+                      <GroupIcon />
+                    </Badge>
                   </Box>
                   
                   <Typography variant="caption" color="text.secondary">

@@ -15,7 +15,7 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
   const [showWidgetSelector, setShowWidgetSelector] = useState(false);
   const [selectedWidget, setSelectedWidget] = useState(null);
   const [cursorPositions, setCursorPositions] = useState({});
-  const { updateWidget, addWidget, removeWidget, socket, activeUsers } = useDashboard();
+  const { currentDashboard, updateLayout, updateWidget, socket, currentUser } = useDashboard();
 
   // Convert dashboard widgets to grid layout format
   useEffect(() => {
@@ -140,7 +140,7 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
     };
 
     // Add widget to context
-    addWidget(newWidget);
+    updateWidget(newWidget);
     
     // Update local dashboard state
     const updatedDashboard = {
@@ -173,10 +173,12 @@ const DashboardCanvas = ({ dashboard, onUpdateDashboard }) => {
 
   const handleWidgetDelete = (widgetId) => {
     if (window.confirm('Are you sure you want to delete this widget?')) {
-      removeWidget(widgetId);
+      updateWidget(widgetId, { isVisible: false }); // Soft delete
       
       // Also update the local dashboard state
-      const updatedWidgets = dashboard.widgets.filter(widget => widget.id !== widgetId);
+      const updatedWidgets = dashboard.widgets.map(widget => 
+        widget.id === widgetId ? { ...widget, isVisible: false } : widget
+      );
       onUpdateDashboard({
         ...dashboard,
         widgets: updatedWidgets

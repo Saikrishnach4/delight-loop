@@ -21,8 +21,6 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Tabs,
-  Tab,
 } from '@mui/material';
 import {
   Menu as MenuIcon,

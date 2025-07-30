@@ -1,34 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
+  Card,
+  CardContent,
   Typography,
-  Button,
   Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Slider,
   Switch,
   FormControlLabel,
-  Divider,
+  Button,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   IconButton,
   Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Divider,
+  Chip,
+  Alert,
+  Snackbar
 } from '@mui/material';
 import {
   Palette as PaletteIcon,
-  FormatSize as FontSizeIcon,
   ColorLens as ColorLensIcon,
+  Typography as TypographyIcon,
+  Settings as SettingsIcon,
+  ExpandMore as ExpandMoreIcon,
   Save as SaveIcon,
   Refresh as RefreshIcon,
-  Download as DownloadIcon,
-  Upload as UploadIcon,
-  Sync as SyncIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
 import { ChromePicker } from 'react-color';
 
@@ -407,7 +412,7 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
           <Typography variant="h6">Theme Customizer</Typography>
           <Tooltip title="Real-time updates enabled">
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <SyncIcon sx={{ fontSize: 16, color: 'success.main' }} />
+              <VisibilityIcon sx={{ fontSize: 16, color: 'success.main' }} />
               <Typography variant="caption" color="success.main">
                 Live
               </Typography>
@@ -417,12 +422,12 @@ const ThemeCustomizer = ({ currentTheme, onThemeChange, onSave }) => {
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Tooltip title="Export Theme">
             <IconButton onClick={exportTheme}>
-              <DownloadIcon />
+              <SaveIcon />
             </IconButton>
           </Tooltip>
           <Tooltip title="Import Theme">
             <IconButton component="label">
-              <UploadIcon />
+              <VisibilityOffIcon />
               <input
                 type="file"
                 accept=".json"
