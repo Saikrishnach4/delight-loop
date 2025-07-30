@@ -272,17 +272,17 @@ const addEmailSendJob = async (campaignId, recipientEmail, emailTemplate, emailT
   }
 };
 
-const addBehaviorTriggerJob = async (campaignId, userEmail, behavior) => {
+const addBehaviorTriggerJob = async (campaignId, userEmail, behavior, additionalData = {}) => {
   try {
     const job = await behaviorTriggerQueue.add(
       'behavior-trigger',
-      { campaignId, userEmail, behavior },
+      { campaignId, userEmail, behavior, ...additionalData },
       {
         jobId: `behavior-${campaignId}-${userEmail}-${behavior}-${Date.now()}`,
         removeOnComplete: true
       }
     );
-    console.log(`🎯 Added behavior trigger job ${job.id}`);
+    console.log(`🎯 Added behavior trigger job ${job.id} for ${behavior}`);
     return job;
   } catch (error) {
     console.error('❌ Failed to add behavior trigger job:', error);

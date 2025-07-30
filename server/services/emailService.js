@@ -105,13 +105,14 @@ class EmailService {
   }
 
   // Add tracking to email content
-  addTrackingToEmail(emailContent, campaignId, userEmail, baseUrl = null) {
+  addTrackingToEmail(emailContent, campaignId, userEmail, baseUrl = null, campaignData = null) {
     try {
       // Use environment variable or default to localhost
       const trackingBaseUrl = baseUrl || process.env.BASE_URL || 'http://localhost:5000';
       const encodedEmail = encodeURIComponent(userEmail);
       const trackingPixelUrl = `${trackingBaseUrl}/api/campaigns/track/open/${campaignId}/${encodedEmail}`;
       const clickTrackingUrl = `${trackingBaseUrl}/api/campaigns/track/click/${campaignId}/${encodedEmail}`;
+      const purchaseUrl = `${trackingBaseUrl}/api/campaigns/purchase/${campaignId}/${encodedEmail}`;
       
       console.log('🔍 ADDING TRACKING TO EMAIL:');
       console.log(`📧 Campaign ID: ${campaignId}`);
@@ -120,6 +121,7 @@ class EmailService {
       console.log(`📧 Using tracking base URL: ${trackingBaseUrl}`);
       console.log(`📧 Tracking URL: ${trackingPixelUrl}`);
       console.log(`📧 Click Tracking URL: ${clickTrackingUrl}`);
+      console.log(`📧 Purchase URL: ${purchaseUrl}`);
       
       let htmlContent = emailContent;
       
@@ -171,7 +173,7 @@ class EmailService {
         const afterMatch = htmlContent.substring(htmlContent.indexOf(match) + match.length);
         
         // Simple check: if there's a <a before and </a> after, skip it
-        const lastATag = beforeMatch.lastIndexOf('<a');
+        const lastATag = beforeMatch.lastIndexOf('<a>');
         const nextCloseTag = afterMatch.indexOf('</a>');
         
         if (lastATag > -1 && nextCloseTag > -1) {
@@ -184,6 +186,79 @@ class EmailService {
         console.log(`📧 Modified plain text URL: ${url} -> ${newTrackingUrl}`);
         return newTrackingUrl;
       });
+
+      // 4. Add purchase button for purchase campaigns
+      // Check if this is a purchase campaign by looking for campaign data or specific keywords
+      const isPurchaseCampaign = campaignData?.purchaseCampaignType && campaignData.purchaseCampaignType !== 'none';
+      const hasPurchaseButton = htmlContent.includes('purchase-button') || htmlContent.includes('Purchase Now');
+      
+      console.log('🔍 Purchase button check:', {
+        isPurchaseCampaign,
+        hasPurchaseButton,
+        campaignData: campaignData,
+        contentLength: htmlContent.length
+      });
+      
+      if (isPurchaseCampaign && !hasPurchaseButton) {
+        // Use campaign data for custom purchase button text and amount
+        const purchaseLinkText = campaignData?.purchaseLinkText || '🛒 Purchase Now - $99.99';
+        const purchaseAmount = campaignData?.purchaseAmount || 99.99;
+        
+        const purchaseButton = `
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${clickTrackingUrl}?url=${encodeURIComponent(purchaseUrl)}" style="
+              display: inline-block;
+              background: linear-gradient(45deg, #2ecc71, #27ae60);
+              color: white;
+              text-decoration: none;
+              padding: 15px 30px;
+              border-radius: 50px;
+              font-size: 16px;
+              font-weight: bold;
+              box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+            ">
+              ${purchaseLinkText.replace('$99.99', `$${purchaseAmount}`)}
+            </a>
+          </div>
+        `;
+        
+        // Add purchase button before the tracking pixel
+        if (!htmlContent.includes('</body>')) {
+          htmlContent += purchaseButton;
+        } else {
+          htmlContent = htmlContent.replace('</body>', `${purchaseButton}</body>`);
+        }
+        
+        console.log('📧 Added purchase button to purchase campaign email');
+      } else if (!isPurchaseCampaign && !htmlContent.includes('purchase') && !htmlContent.includes('buy') && !htmlContent.includes('order')) {
+        // For non-purchase campaigns, add purchase button only if no purchase-related content exists
+        const purchaseButton = `
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${clickTrackingUrl}?url=${encodeURIComponent(purchaseUrl)}" style="
+              display: inline-block;
+              background: linear-gradient(45deg, #2ecc71, #27ae60);
+              color: white;
+              text-decoration: none;
+              padding: 15px 30px;
+              border-radius: 50px;
+              font-size: 16px;
+              font-weight: bold;
+              box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+            ">
+              🛒 Purchase Now - $99.99
+            </a>
+          </div>
+        `;
+        
+        // Add purchase button before the tracking pixel
+        if (!htmlContent.includes('</body>')) {
+          htmlContent += purchaseButton;
+        } else {
+          htmlContent = htmlContent.replace('</body>', `${purchaseButton}</body>`);
+        }
+        
+        console.log('📧 Added purchase button to regular email');
+      }
       
       console.log('✅ Enhanced tracking added to email content successfully');
       return htmlContent;

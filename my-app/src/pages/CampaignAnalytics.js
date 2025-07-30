@@ -136,6 +136,39 @@ const CampaignAnalytics = () => {
             Refresh Analytics
           </Button>
           <Button
+            variant="outlined"
+            color="success"
+            onClick={async () => {
+              if (analytics?.recipients?.[0]?.email) {
+                try {
+                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                      recipientEmail: analytics.recipients[0].email,
+                      action: 'purchase',
+                      purchaseAmount: 99.99,
+                      purchaseCurrency: 'USD'
+                    })
+                  });
+                  const result = await response.json();
+                  console.log('🧪 Test purchase result:', result);
+                  if (result.success) {
+                    fetchAnalytics(); // Refresh analytics
+                  }
+                } catch (error) {
+                  console.error('❌ Test purchase failed:', error);
+                }
+              }
+            }}
+            sx={{ mr: 2 }}
+          >
+            Test Purchase ($99.99)
+          </Button>
+          {/* <Button
             variant="contained"
             onClick={() => {
               console.log('📊 Current analytics state:', analytics);
@@ -205,7 +238,7 @@ const CampaignAnalytics = () => {
             }}
           >
             Test Click
-          </Button>
+          </Button> */}
         </Box>
       </Box>
 
@@ -298,6 +331,36 @@ const CampaignAnalytics = () => {
         <Grid item xs={12} sm={6} md={2}>
           <Card>
             <CardContent>
+              <Typography variant="h3" color="success.main" gutterBottom>
+                {analytics.totalPurchases || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Total Purchases
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                ${analytics.totalRevenue || 0} Revenue
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <Card>
+            <CardContent>
+              <Typography variant="h3" color="error.main" gutterBottom>
+                {analytics.totalAbandonments || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Abandonments
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                ${analytics.abandonmentRate || 0}% Rate
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={2}>
+          <Card>
+            <CardContent>
               <Typography variant="h3" color="error.main" gutterBottom>
                 {totalFollowUps}
               </Typography>
@@ -310,7 +373,7 @@ const CampaignAnalytics = () => {
       </Grid>
 
       {/* Campaign Performance Summary */}
-      <Card sx={{ mb: 3 }}>
+      {/* <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
             Campaign Performance Summary
@@ -356,7 +419,7 @@ const CampaignAnalytics = () => {
             </Grid>
           </Grid>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Recipients Table */}
       <Card>
@@ -374,6 +437,10 @@ const CampaignAnalytics = () => {
                   <TableCell>Manual Emails</TableCell>
                   <TableCell>Opens</TableCell>
                   <TableCell>Clicks</TableCell>
+                  <TableCell>Purchases</TableCell>
+                  <TableCell>Revenue</TableCell>
+                  <TableCell>Abandonments</TableCell>
+                  <TableCell>Time Spent</TableCell>
                   <TableCell>Follow-ups</TableCell>
                   <TableCell>Idle Emails</TableCell>
                   <TableCell>Open Rate</TableCell>
@@ -413,6 +480,26 @@ const CampaignAnalytics = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
+                      <Typography variant="body2" color="success.main" fontWeight="medium">
+                        {recipient.totalPurchases || 0}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="success.main" fontWeight="medium">
+                        ${recipient.totalRevenue || 0}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="error.main" fontWeight="medium">
+                        {recipient.totalAbandonments || 0}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="warning.main" fontWeight="medium">
+                        {recipient.avgTimeSpent || 0}s
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
                       <Typography variant="body2" color="info.main" fontWeight="medium">
                         {recipient.followUpsSent || 0}
                       </Typography>
@@ -449,7 +536,7 @@ const CampaignAnalytics = () => {
       </Card>
 
       {/* Tracking Links Section */}
-      <Card sx={{ mt: 3 }}>
+      {/* <Card sx={{ mt: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
             Tracking Links for Testing
@@ -504,10 +591,10 @@ const CampaignAnalytics = () => {
             ))}
           </Box>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Debug Section */}
-      <Card sx={{ mt: 3 }}>
+      {/* <Card sx={{ mt: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
             Debug Information
@@ -537,54 +624,9 @@ const CampaignAnalytics = () => {
             ))}
           </Box>
         </CardContent>
-      </Card>
+      </Card> */}
 
-      {/* Legend */}
-      <Card sx={{ mt: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Email Status Legend
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={2}>
-              <Box display="flex" alignItems="center">
-                <EmailIcon color="action" sx={{ mr: 1 }} />
-                <Typography variant="body2">Manual Email Sent</Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <Box display="flex" alignItems="center">
-                <LinkIcon color="info" sx={{ mr: 1 }} />
-                <Typography variant="body2">Email with Links</Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <Box display="flex" alignItems="center">
-                <ScheduleIcon color="warning" sx={{ mr: 1 }} />
-                <Typography variant="body2">Time Delay Follow-up</Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <Box display="flex" alignItems="center">
-                <WarningIcon color="error" sx={{ mr: 1 }} />
-                <Typography variant="body2">Idle Reminder Sent</Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <Box display="flex" alignItems="center">
-                <CheckCircleIcon color="secondary" sx={{ mr: 1 }} />
-                <Typography variant="body2">Email Opened</Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={12} sm={6} md={2}>
-              <Box display="flex" alignItems="center">
-                <LinkIcon color="warning" sx={{ mr: 1 }} />
-                <Typography variant="body2">Link Clicked</Typography>
-              </Box>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+
     </Box>
   );
 };

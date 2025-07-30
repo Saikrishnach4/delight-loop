@@ -114,10 +114,15 @@ class WorkerService {
       
       const anyEmailHasLinks = originalEmailHasLinks || (timeDelayEmailSent && timeDelayFollowUpHasLinks);
       
-      if (!anyEmailHasLinks) {
+      // For purchase campaigns, always consider emails as having links (they have purchase buttons)
+      const isPurchaseEmail = campaign.purchaseCampaignType && campaign.purchaseCampaignType !== 'none';
+      
+      if (!anyEmailHasLinks && !isPurchaseEmail) {
         console.log(`⏭️ No emails contain links for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
         return;
       }
+
+      console.log(`🔍 Idle trigger check for ${recipientEmail}: hasLinks=${anyEmailHasLinks}, isPurchaseEmail=${isPurchaseEmail}`);
 
       // Find idle trigger
       const idleTriggers = campaign.behaviorTriggers.filter(t => 
@@ -206,10 +211,22 @@ class WorkerService {
       // Mark the behavior as occurred
       if (behavior === 'open') {
         latestManualEmail.opened = true;
+        latestManualEmail.openedAt = new Date();
         campaign.analytics.totalOpens += 1;
       } else if (behavior === 'click') {
         latestManualEmail.clicked = true;
+        latestManualEmail.clickedAt = new Date();
         campaign.analytics.totalClicks += 1;
+      } else if (behavior === 'purchase') {
+        latestManualEmail.purchased = true;
+        latestManualEmail.purchasedAt = new Date();
+        // Extract purchase amount from job data if available
+        if (job && job.data && job.data.purchaseAmount) {
+          latestManualEmail.purchaseAmount = job.data.purchaseAmount;
+          latestManualEmail.purchaseCurrency = job.data.purchaseCurrency || 'USD';
+        }
+        campaign.analytics.totalPurchases += 1;
+        campaign.analytics.totalRevenue += (latestManualEmail.purchaseAmount || 0);
       }
 
       // Check for behavior triggers
@@ -222,7 +239,8 @@ class WorkerService {
         
         // Check if follow-up already sent
         if ((behavior === 'open' && latestManualEmail.openFollowUpSent) ||
-            (behavior === 'click' && latestManualEmail.clickFollowUpSent)) {
+            (behavior === 'click' && latestManualEmail.clickFollowUpSent) ||
+            (behavior === 'purchase' && latestManualEmail.purchaseFollowUpSent)) {
           console.log(`⏭️ ${behavior} follow-up already sent for ${userEmail}`);
           await campaign.save();
           return { success: true, message: `${behavior} follow-up already sent`, followUpSent: false };
@@ -236,6 +254,8 @@ class WorkerService {
           latestManualEmail.openFollowUpSent = true;
         } else if (behavior === 'click') {
           latestManualEmail.clickFollowUpSent = true;
+        } else if (behavior === 'purchase') {
+          latestManualEmail.purchaseFollowUpSent = true;
         }
 
         campaign.analytics.totalSent += 1;

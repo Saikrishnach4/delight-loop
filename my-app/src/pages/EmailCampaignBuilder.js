@@ -39,8 +39,7 @@ import {
   Delete as DeleteIcon,
   Email as EmailIcon,
   BarChart as BarChartIcon,
-  People as PeopleIcon,
-  AccessTime as AccessTimeIcon
+  People as PeopleIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 
@@ -56,9 +55,6 @@ const EmailCampaignBuilder = () => {
   const [newRecipient, setNewRecipient] = useState({ email: '', name: '' });
   const [sendToSpecificOpen, setSendToSpecificOpen] = useState(false);
   const [selectedRecipients, setSelectedRecipients] = useState([]);
-  const [clickTrackingEmail, setClickTrackingEmail] = useState('');
-  const [clickTrackingUrl, setClickTrackingUrl] = useState('');
-  const [generatedClickLink, setGeneratedClickLink] = useState('');
 
   useEffect(() => {
     if (id === 'new') {
@@ -72,7 +68,16 @@ const EmailCampaignBuilder = () => {
           senderName: user?.username || ''
         },
         timeDelayTrigger: { enabled: false },
-        behaviorTriggers: []
+        behaviorTriggers: [],
+        // Purchase Campaign Settings
+        purchaseCampaignType: 'none',
+        selectedPurchaseRecipients: [],
+        purchaseFilter: {
+          type: 'opens',
+          threshold: 1
+        },
+        purchaseLinkText: '🛒 Purchase Now - $99.99',
+        purchaseAmount: 99.99
       });
       setLoading(false);
     } else {
@@ -107,6 +112,15 @@ const EmailCampaignBuilder = () => {
       setSaving(true);
       const method = id === 'new' ? 'POST' : 'PUT';
       const url = id === 'new' ? '/api/campaigns' : `/api/campaigns/${id}`;
+
+      // Debug: Log what we're saving
+      console.log('💾 Saving campaign with data:', {
+        purchaseCampaignType: campaign.purchaseCampaignType,
+        selectedPurchaseRecipients: campaign.selectedPurchaseRecipients,
+        purchaseFilter: campaign.purchaseFilter,
+        purchaseLinkText: campaign.purchaseLinkText,
+        purchaseAmount: campaign.purchaseAmount
+      });
 
       const response = await fetch(url, {
         method,
@@ -256,9 +270,58 @@ const EmailCampaignBuilder = () => {
 
 
 
-  const handleCheckTriggers = async () => {
+
+
+
+
+  const handleSendPurchaseCampaign = async () => {
     try {
-      const response = await fetch('/api/campaigns/check-triggers', {
+      setSaving(true);
+      setError(null);
+
+      // Debug: Log current campaign settings
+      console.log('Current campaign settings:', {
+        purchaseCampaignType: campaign.purchaseCampaignType,
+        selectedPurchaseRecipients: campaign.selectedPurchaseRecipients,
+        purchaseFilter: campaign.purchaseFilter,
+        purchaseLinkText: campaign.purchaseLinkText,
+        purchaseAmount: campaign.purchaseAmount
+      });
+
+      // Validate purchase campaign settings
+      if (!campaign.purchaseCampaignType || campaign.purchaseCampaignType === 'none') {
+        alert('❌ Please configure purchase campaign settings first. Select a purchase campaign type and recipients.');
+        return;
+      }
+
+      if (campaign.purchaseCampaignType === 'selected' && (!campaign.selectedPurchaseRecipients || campaign.selectedPurchaseRecipients.length === 0)) {
+        alert('❌ Please select at least one recipient for the purchase campaign.');
+        return;
+      }
+
+      // First save the campaign to ensure all settings are saved
+      console.log('Saving campaign with purchase settings...');
+      await handleSave();
+
+      // Wait a moment for the save to complete and fetch the updated campaign
+      console.log('Waiting for save to complete...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await fetchCampaign();
+
+      // Debug: Log campaign after save and fetch
+      console.log('Campaign after save and fetch:', {
+        purchaseCampaignType: campaign.purchaseCampaignType,
+        selectedPurchaseRecipients: campaign.selectedPurchaseRecipients
+      });
+
+      // Double-check the campaign settings before sending
+      if (!campaign.purchaseCampaignType || campaign.purchaseCampaignType === 'none') {
+        alert('❌ Campaign settings not saved properly. Please try saving the campaign again.');
+        return;
+      }
+
+      // Send purchase campaign
+      const response = await fetch(`/api/campaigns/${id}/send-purchase-campaign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -267,25 +330,23 @@ const EmailCampaignBuilder = () => {
       });
 
       const result = await response.json();
-      
-      if (response.ok) {
-        alert(`Time trigger check completed successfully. Check console for details.`);
-        fetchCampaign(); // Refresh campaign data
-      } else {
-        alert(`Time trigger check failed: ${result.error}`);
-      }
-    } catch (error) {
-      alert('Failed to check time triggers');
-    }
-  };
 
-  const handleGenerateClickLink = () => {
-    if (!clickTrackingEmail || !clickTrackingUrl) {
-      alert('Please enter both Recipient Email and Destination URL.');
-      return;
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send purchase campaign');
+      }
+
+      alert(`✅ Purchase campaign sent successfully!\n\nSent to: ${result.sentCount} recipients\nFailed: ${result.failedEmails.length} recipients\n\n${result.message}`);
+      
+      // Refresh campaign data
+      await fetchCampaign();
+
+    } catch (error) {
+      console.error('Error sending purchase campaign:', error);
+      setError(error.message);
+      alert(`❌ Failed to send purchase campaign: ${error.message}`);
+    } finally {
+      setSaving(false);
     }
-    const generatedLink = `http://localhost:5000/api/campaigns/track/click/${id}/${encodeURIComponent(clickTrackingEmail)}?url=${encodeURIComponent(clickTrackingUrl)}`;
-    setGeneratedClickLink(generatedLink);
   };
 
   if (loading) {
@@ -588,7 +649,7 @@ const EmailCampaignBuilder = () => {
                 Send follow-up emails when users interact with your emails
               </Typography>
               
-              {['open', 'click', 'idle'].map(behavior => {
+              {['open', 'click', 'idle', 'purchase', 'abandonment'].map(behavior => {
                 const existingTrigger = campaign.behaviorTriggers?.find(t => t.behavior === behavior);
                 
                 return (
@@ -611,6 +672,7 @@ const EmailCampaignBuilder = () => {
                               behavior,
                               enabled: true,
                               idleTime: { enabled: false, minutes: 30 },
+                              purchaseThreshold: { enabled: false, amount: 0, currency: 'USD' },
                               followUpEmail: { subject: '', body: '' }
                             });
                           }
@@ -693,6 +755,104 @@ const EmailCampaignBuilder = () => {
                             </Box>
                             <Typography variant="caption" color="text.secondary">
                               Send reminder email if user doesn't click/open within this time
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {/* Purchase Threshold Configuration - Only for 'purchase' behavior */}
+                        {behavior === 'purchase' && (
+                          <Box mb={2} p={2} bgcolor="grey.50" borderRadius={1}>
+                            <Typography variant="subtitle2" gutterBottom>
+                              Purchase Threshold Configuration
+                            </Typography>
+                            <Box display="flex" alignItems="center" gap={2}>
+                              <FormControl size="small">
+                                <InputLabel>Threshold</InputLabel>
+                                <Select
+                                  value={existingTrigger.purchaseThreshold?.enabled ? 'enabled' : 'disabled'}
+                                  onChange={(e) => {
+                                    const updatedTriggers = campaign.behaviorTriggers.map(t =>
+                                      t.behavior === behavior
+                                        ? {
+                                            ...t,
+                                            purchaseThreshold: {
+                                              ...t.purchaseThreshold,
+                                              enabled: e.target.value === 'enabled'
+                                            }
+                                          }
+                                        : t
+                                    );
+                                    setCampaign({
+                                      ...campaign,
+                                      behaviorTriggers: updatedTriggers
+                                    });
+                                  }}
+                                  label="Threshold"
+                                >
+                                  <MenuItem value="disabled">No Threshold</MenuItem>
+                                  <MenuItem value="enabled">Minimum Amount</MenuItem>
+                                </Select>
+                              </FormControl>
+                              
+                              {existingTrigger.purchaseThreshold?.enabled && (
+                                <>
+                                  <TextField
+                                    size="small"
+                                    type="number"
+                                    label="Amount"
+                                    value={existingTrigger.purchaseThreshold?.amount || 0}
+                                    onChange={(e) => {
+                                      const updatedTriggers = campaign.behaviorTriggers.map(t =>
+                                        t.behavior === behavior
+                                          ? {
+                                              ...t,
+                                              purchaseThreshold: {
+                                                ...t.purchaseThreshold,
+                                                amount: parseFloat(e.target.value) || 0
+                                              }
+                                            }
+                                          : t
+                                      );
+                                      setCampaign({
+                                        ...campaign,
+                                        behaviorTriggers: updatedTriggers
+                                      });
+                                    }}
+                                    sx={{ width: 120 }}
+                                    inputProps={{ min: 0, step: 0.01 }}
+                                  />
+                                  <FormControl size="small" sx={{ width: 80 }}>
+                                    <Select
+                                      value={existingTrigger.purchaseThreshold?.currency || 'USD'}
+                                      onChange={(e) => {
+                                        const updatedTriggers = campaign.behaviorTriggers.map(t =>
+                                          t.behavior === behavior
+                                            ? {
+                                                ...t,
+                                                purchaseThreshold: {
+                                                  ...t.purchaseThreshold,
+                                                  currency: e.target.value
+                                                }
+                                              }
+                                            : t
+                                        );
+                                        setCampaign({
+                                          ...campaign,
+                                          behaviorTriggers: updatedTriggers
+                                        });
+                                      }}
+                                    >
+                                      <MenuItem value="USD">USD</MenuItem>
+                                      <MenuItem value="EUR">EUR</MenuItem>
+                                      <MenuItem value="GBP">GBP</MenuItem>
+                                      <MenuItem value="INR">INR</MenuItem>
+                                    </Select>
+                                  </FormControl>
+                                </>
+                              )}
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              Only trigger if purchase amount meets minimum threshold
                             </Typography>
                           </Box>
                         )}
@@ -844,75 +1004,312 @@ const EmailCampaignBuilder = () => {
           </Card>
         </Grid>
 
-        {/* Behavior Testing Section */}
+        {/* Purchase Campaign Section */}
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Test Behavior Triggers
+                🛒 Purchase Campaign Settings
+              </Typography>
+              
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Configure purchase campaigns and select specific users to send purchase links to
               </Typography>
 
-
-
-
-              {/* Generate Click Tracking Link */}
-              <Box mt={3}>
-                <Typography variant="h6" gutterBottom>
-                  Generate Click Tracking Link
-                </Typography>
-                <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
-                  <TextField
-                    size="small"
-                    label="Recipient Email"
-                    value={clickTrackingEmail}
-                    onChange={(e) => setClickTrackingEmail(e.target.value)}
-                    placeholder="Enter recipient email"
-                  />
-                  <TextField
-                    size="small"
-                    label="Destination URL"
-                    value={clickTrackingUrl}
-                    onChange={(e) => setClickTrackingUrl(e.target.value)}
-                    placeholder="https://example.com"
-                    sx={{ minWidth: 200 }}
-                  />
-                  <Button
-                    variant="outlined"
-                    onClick={handleGenerateClickLink}
-                    disabled={!clickTrackingEmail || !clickTrackingUrl}
-                  >
-                    Generate Link
-                  </Button>
-                </Box>
-                {generatedClickLink && (
-                  <Box mt={2}>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Generated Click Tracking Link:
+              <Grid container spacing={3}>
+                {/* Purchase Campaign Configuration */}
+                <Grid item xs={12} md={6}>
+                  <Box p={2} border="1px solid #ddd" borderRadius={1}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Purchase Campaign Configuration
                     </Typography>
-                    <Box display="flex" gap={1} alignItems="center">
-                      <TextField
-                        fullWidth
-                        size="small"
-                        value={generatedClickLink}
-                        InputProps={{ readOnly: true }}
-                      />
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          navigator.clipboard.writeText(generatedClickLink);
-                          alert('Link copied to clipboard!');
-                        }}
+                    
+                    <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                      <InputLabel>Purchase Campaign Type</InputLabel>
+                      <Select
+                        value={campaign.purchaseCampaignType || 'none'}
+                        onChange={(e) => setCampaign({
+                          ...campaign,
+                          purchaseCampaignType: e.target.value
+                        })}
+                        label="Purchase Campaign Type"
                       >
-                        Copy
-                      </Button>
-                    </Box>
+                        <MenuItem value="none">No Purchase Campaign</MenuItem>
+                        <MenuItem value="all">Send to All Recipients</MenuItem>
+                        <MenuItem value="selected">Send to Selected Recipients</MenuItem>
+                        <MenuItem value="filtered">Send to Filtered Recipients</MenuItem>
+                      </Select>
+                    </FormControl>
+
+                    {campaign.purchaseCampaignType === 'filtered' && (
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Filter Criteria
+                        </Typography>
+                        
+                        <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                          <InputLabel>Filter By</InputLabel>
+                          <Select
+                            value={campaign.purchaseFilter?.type || 'opens'}
+                            onChange={(e) => setCampaign({
+                              ...campaign,
+                              purchaseFilter: {
+                                ...campaign.purchaseFilter,
+                                type: e.target.value
+                              }
+                            })}
+                            label="Filter By"
+                          >
+                            <MenuItem value="opens">Users who opened emails</MenuItem>
+                            <MenuItem value="clicks">Users who clicked links</MenuItem>
+                            <MenuItem value="purchases">Users who made purchases</MenuItem>
+                            <MenuItem value="inactive">Users who haven't engaged</MenuItem>
+                            <MenuItem value="new">New recipients only</MenuItem>
+                          </Select>
+                        </FormControl>
+
+                        <TextField
+                          fullWidth
+                          size="small"
+                          type="number"
+                          label="Minimum threshold"
+                          value={campaign.purchaseFilter?.threshold || 1}
+                          onChange={(e) => setCampaign({
+                            ...campaign,
+                            purchaseFilter: {
+                              ...campaign.purchaseFilter,
+                              threshold: parseInt(e.target.value) || 1
+                            }
+                          })}
+                          sx={{ mb: 1 }}
+                          helperText="e.g., minimum opens, clicks, or purchases"
+                        />
+                      </Box>
+                    )}
+
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Purchase Link Text"
+                      value={campaign.purchaseLinkText || '🛒 Purchase Now - $99.99'}
+                      onChange={(e) => setCampaign({
+                        ...campaign,
+                        purchaseLinkText: e.target.value
+                      })}
+                      sx={{ mb: 2 }}
+                      helperText="Text to display on the purchase button"
+                    />
+
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="number"
+                      label="Purchase Amount ($)"
+                      value={campaign.purchaseAmount || 99.99}
+                      onChange={(e) => setCampaign({
+                        ...campaign,
+                        purchaseAmount: parseFloat(e.target.value) || 99.99
+                      })}
+                      sx={{ mb: 2 }}
+                      helperText="Price to display on purchase button"
+                    />
                   </Box>
-                )}
-              </Box>
+                </Grid>
+
+                {/* Selected Recipients for Purchase Campaign */}
+                <Grid item xs={12} md={6}>
+                  <Box p={2} border="1px solid #ddd" borderRadius={1}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Selected Recipients for Purchase Campaign
+                    </Typography>
+                    
+                    {campaign.purchaseCampaignType === 'selected' && (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          Select specific recipients to send purchase links to:
+                        </Typography>
+                        
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell padding="checkbox">
+                                  <Checkbox
+                                    checked={campaign.selectedPurchaseRecipients?.length === campaign.recipients?.length}
+                                    indeterminate={campaign.selectedPurchaseRecipients?.length > 0 && campaign.selectedPurchaseRecipients?.length < campaign.recipients?.length}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setCampaign({
+                                          ...campaign,
+                                          selectedPurchaseRecipients: campaign.recipients?.map(r => r.email) || []
+                                        });
+                                      } else {
+                                        setCampaign({
+                                          ...campaign,
+                                          selectedPurchaseRecipients: []
+                                        });
+                                      }
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell>Email</TableCell>
+                                <TableCell>Name</TableCell>
+                                <TableCell>Status</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {campaign.recipients?.map((recipient, index) => (
+                                <TableRow key={index}>
+                                  <TableCell padding="checkbox">
+                                    <Checkbox
+                                      checked={campaign.selectedPurchaseRecipients?.includes(recipient.email) || false}
+                                      onChange={(e) => {
+                                        const currentSelected = campaign.selectedPurchaseRecipients || [];
+                                        if (e.target.checked) {
+                                          setCampaign({
+                                            ...campaign,
+                                            selectedPurchaseRecipients: [...currentSelected, recipient.email]
+                                          });
+                                        } else {
+                                          setCampaign({
+                                            ...campaign,
+                                            selectedPurchaseRecipients: currentSelected.filter(email => email !== recipient.email)
+                                          });
+                                        }
+                                      }}
+                                    />
+                                  </TableCell>
+                                  <TableCell>{recipient.email}</TableCell>
+                                  <TableCell>{recipient.name || '-'}</TableCell>
+                                  <TableCell>
+                                    <Chip
+                                      label={recipient.status}
+                                      size="small"
+                                      color={recipient.status === 'active' ? 'success' : 'default'}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                          Selected: {campaign.selectedPurchaseRecipients?.length || 0} recipients
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {campaign.purchaseCampaignType === 'filtered' && (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          Recipients matching your filter criteria:
+                        </Typography>
+                        
+                        <Box p={2} bgcolor="grey.50" borderRadius={1}>
+                          <Typography variant="h6" color="primary">
+                            {campaign.filteredPurchaseRecipients?.length || 0} recipients
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            will receive purchase links based on your filter
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+
+                    {campaign.purchaseCampaignType === 'all' && (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          All active recipients will receive purchase links:
+                        </Typography>
+                        
+                        <Box p={2} bgcolor="grey.50" borderRadius={1}>
+                          <Typography variant="h6" color="primary">
+                            {campaign.recipients?.filter(r => r.status === 'active').length || 0} recipients
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            will receive purchase links
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+
+                    {campaign.purchaseCampaignType !== 'none' && (
+                      <>
+                        <Button
+                          variant="contained"
+                          color="success"
+                          fullWidth
+                          sx={{ mt: 2 }}
+                          onClick={handleSendPurchaseCampaign}
+                          disabled={saving}
+                        >
+                          {saving ? <CircularProgress size={20} /> : '🛒 Send Purchase Campaign'}
+                        </Button>
+                        
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          fullWidth
+                          sx={{ mt: 1 }}
+                          onClick={async () => {
+                            try {
+                              const response = await fetch(`/api/campaigns/${id}/purchase-settings`, {
+                                headers: {
+                                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                }
+                              });
+                              const result = await response.json();
+                              console.log('🔍 Purchase Settings Debug:', result);
+                              alert(`Purchase Settings:\n${JSON.stringify(result.purchaseSettings, null, 2)}`);
+                            } catch (error) {
+                              console.error('Debug error:', error);
+                              alert('Debug failed: ' + error.message);
+                            }
+                          }}
+                        >
+                          🔍 Debug Purchase Settings
+                        </Button>
+                        
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          fullWidth
+                          sx={{ mt: 1 }}
+                          onClick={async () => {
+                            try {
+                              const userEmail = prompt('Enter user email to test idle trigger:');
+                              if (!userEmail) return;
+                              
+                              const response = await fetch(`/api/campaigns/${id}/test-idle-trigger`, {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                },
+                                body: JSON.stringify({ userEmail })
+                              });
+                              const result = await response.json();
+                              console.log('⏰ Idle Trigger Test:', result);
+                              alert(`Idle Trigger Test:\n${result.message}`);
+                            } catch (error) {
+                              console.error('Idle trigger test error:', error);
+                              alert('Idle trigger test failed: ' + error.message);
+                            }
+                          }}
+                        >
+                          ⏰ Test Idle Trigger
+                        </Button>
+                      </>
+                    )}
+                  </Box>
+                </Grid>
+              </Grid>
             </CardContent>
           </Card>
         </Grid>
+
+
 
         {/* Actions */}
         <Grid item xs={12}>
@@ -941,14 +1338,7 @@ const EmailCampaignBuilder = () => {
                   Send to Specific Recipients
                 </Button>
                 
-                <Button
-                  variant="outlined"
-                  startIcon={<AccessTimeIcon />}
-                  onClick={handleCheckTriggers}
-                  disabled={campaign.status !== 'active'}
-                >
-                  Check Time Triggers
-                </Button>
+
                 
                 <Button
                   variant="outlined"

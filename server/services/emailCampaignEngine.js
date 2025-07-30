@@ -122,7 +122,7 @@ class EmailCampaignEngine {
   }
 
   // Handle user behavior (open, click, idle) and send follow-up emails
-  async handleUserBehavior(campaignId, userEmail, behavior) {
+  async handleUserBehavior(campaignId, userEmail, behavior, additionalData = {}) {
     try {
       console.log(`🎯 Handling user behavior: ${behavior} for ${userEmail} in campaign ${campaignId}`);
       
@@ -164,6 +164,21 @@ class EmailCampaignEngine {
           latestEmail.clicked = true;
           latestEmail.clickedAt = new Date();
           console.log(`📧 Marked latest email as clicked for ${userEmail}`);
+        }
+      } else if (behavior === 'purchase') {
+        campaign.analytics.totalPurchases += 1;
+        const purchaseAmount = additionalData.purchaseAmount || 0;
+        campaign.analytics.totalRevenue += purchaseAmount;
+        console.log(`📊 Updated purchases count for campaign ${campaign.name}, Revenue: $${purchaseAmount}`);
+        
+        // Mark the most recent manual email as purchased
+        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+          const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+          latestEmail.purchased = true;
+          latestEmail.purchasedAt = new Date();
+          latestEmail.purchaseAmount = purchaseAmount;
+          latestEmail.purchaseCurrency = additionalData.purchaseCurrency || 'USD';
+          console.log(`📧 Marked latest email as purchased for ${userEmail}, Amount: $${purchaseAmount}`);
         }
       }
 

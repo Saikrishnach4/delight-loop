@@ -69,7 +69,28 @@ router.post('/', auth, async (req, res) => {
 // Update a campaign
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { name, description, emailTemplate, timeDelayTrigger, behaviorTriggers, status } = req.body;
+    const { 
+      name, 
+      description, 
+      emailTemplate, 
+      timeDelayTrigger, 
+      behaviorTriggers, 
+      status,
+      // Purchase Campaign Settings
+      purchaseCampaignType,
+      selectedPurchaseRecipients,
+      purchaseFilter,
+      purchaseLinkText,
+      purchaseAmount
+    } = req.body;
+
+    console.log('🔍 Received campaign update data:', {
+      purchaseCampaignType,
+      selectedPurchaseRecipients,
+      purchaseFilter,
+      purchaseLinkText,
+      purchaseAmount
+    });
 
     const campaign = await EmailCampaign.findOne({
       _id: req.params.id,
@@ -87,6 +108,21 @@ router.put('/:id', auth, async (req, res) => {
     if (timeDelayTrigger !== undefined) campaign.timeDelayTrigger = timeDelayTrigger;
     if (behaviorTriggers !== undefined) campaign.behaviorTriggers = behaviorTriggers;
     if (status !== undefined) campaign.status = status;
+
+    // Update purchase campaign settings
+    if (purchaseCampaignType !== undefined) campaign.purchaseCampaignType = purchaseCampaignType;
+    if (selectedPurchaseRecipients !== undefined) campaign.selectedPurchaseRecipients = selectedPurchaseRecipients;
+    if (purchaseFilter !== undefined) campaign.purchaseFilter = purchaseFilter;
+    if (purchaseLinkText !== undefined) campaign.purchaseLinkText = purchaseLinkText;
+    if (purchaseAmount !== undefined) campaign.purchaseAmount = purchaseAmount;
+
+    console.log('💾 Saving campaign with purchase settings:', {
+      purchaseCampaignType: campaign.purchaseCampaignType,
+      selectedPurchaseRecipients: campaign.selectedPurchaseRecipients,
+      purchaseFilter: campaign.purchaseFilter,
+      purchaseLinkText: campaign.purchaseLinkText,
+      purchaseAmount: campaign.purchaseAmount
+    });
 
     await campaign.save();
     res.json(campaign);
@@ -474,21 +510,462 @@ router.get('/track/click/:campaignId/:userEmail', async (req, res) => {
   }
 });
 
-// Test endpoint to simulate opens and clicks for debugging
+// Test endpoint to simulate opens, clicks, and purchases for debugging
 router.post('/:id/test-interactions', auth, async (req, res) => {
   try {
-    const { recipientEmail, action } = req.body; // action can be 'open' or 'click'
+    const { recipientEmail, action, purchaseAmount, purchaseCurrency } = req.body; // action can be 'open', 'click', or 'purchase'
     
     console.log(`🧪 Testing ${action} for ${recipientEmail} in campaign ${req.params.id}`);
     
-    const result = await emailCampaignEngine.handleUserBehavior(req.params.id, recipientEmail, action);
-    
-    res.json({ success: true, result });
+    if (action === 'purchase') {
+      // For purchase actions, we need to pass additional data
+      const result = await emailCampaignEngine.handleUserBehavior(req.params.id, recipientEmail, action, {
+        purchaseAmount: purchaseAmount || 0,
+        purchaseCurrency: purchaseCurrency || 'USD'
+      });
+      res.json({ success: true, result });
+    } else {
+      const result = await emailCampaignEngine.handleUserBehavior(req.params.id, recipientEmail, action);
+      res.json({ success: true, result });
+    }
   } catch (error) {
     console.error('Error testing interactions:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// Track purchases (for e-commerce integration)
+router.post('/:id/track-purchase', async (req, res) => {
+  try {
+    const { userEmail, purchaseAmount, purchaseCurrency, orderId } = req.body;
+    
+    console.log(`🛒 Purchase tracked: ${userEmail} in campaign ${req.params.id}, Amount: ${purchaseAmount} ${purchaseCurrency}, Order: ${orderId}`);
+    
+    // Find the campaign
+    const campaign = await EmailCampaign.findById(req.params.id);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    // Send "Thank you for purchasing" email
+    const thankYouEmail = {
+      subject: `Thank you for your purchase! - ${campaign.name}`,
+      body: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #2ecc71;">🎉 Thank You for Your Purchase!</h1>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h2 style="color: #333; margin-bottom: 15px;">Order Confirmation</h2>
+            <p><strong>Product:</strong> ${campaign.name}</p>
+            <p><strong>Amount:</strong> $${purchaseAmount} ${purchaseCurrency}</p>
+            <p><strong>Order ID:</strong> ${orderId}</p>
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <h3 style="color: #333;">What happens next?</h3>
+            <ul style="color: #666; line-height: 1.6;">
+              <li>You will receive your product within 3-5 business days</li>
+              <li>We'll send you tracking information once your order ships</li>
+              <li>Our support team is available 24/7 if you need assistance</li>
+            </ul>
+          </div>
+          
+          <div style="text-align: center; margin-top: 30px;">
+            <p style="color: #666;">Thank you for choosing us!</p>
+            <p style="color: #666;">Best regards,<br>The ${campaign.name} Team</p>
+          </div>
+        </div>
+      `
+    };
+
+    // Send the thank you email
+    const emailService = require('../services/emailService');
+    await emailService.sendEmail({
+      to: userEmail,
+      subject: thankYouEmail.subject,
+      body: thankYouEmail.body
+    });
+
+    console.log(`📧 Thank you email sent to ${userEmail}`);
+    
+    // Trigger purchase behavior with purchase data
+    const result = await emailCampaignEngine.handleUserBehavior(req.params.id, userEmail, 'purchase', {
+      purchaseAmount: purchaseAmount || 0,
+      purchaseCurrency: purchaseCurrency || 'USD',
+      orderId: orderId
+    });
+    
+    if (result.success) {
+      console.log(`✅ Purchase behavior processed for ${userEmail}`);
+      if (result.followUpSent) {
+        console.log(`📧 Follow-up email sent for purchase behavior to ${userEmail}`);
+      }
+    }
+    
+    res.json({ success: true, message: 'Purchase tracked successfully and thank you email sent', result });
+  } catch (error) {
+    console.error('Error tracking purchase:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Track purchase page abandonment
+router.post('/:id/track-abandonment', async (req, res) => {
+  try {
+    const { userEmail, timeSpent, pageUrl } = req.body;
+    
+    console.log(`🚪 Purchase abandonment tracked: ${userEmail} in campaign ${req.params.id}, Time spent: ${timeSpent}s`);
+    
+    // Find the campaign
+    const campaign = await EmailCampaign.findById(req.params.id);
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    // Find the recipient and update abandonment data
+    const recipient = campaign.recipients.find(r => r.email === userEmail);
+    if (recipient && recipient.manualEmails && recipient.manualEmails.length > 0) {
+      const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+      latestEmail.purchasePageAbandoned = true;
+      latestEmail.purchasePageTimeSpent = timeSpent;
+      latestEmail.purchasePageAbandonedAt = new Date();
+      
+      // Update campaign analytics
+      campaign.analytics.totalAbandonments = (campaign.analytics.totalAbandonments || 0) + 1;
+      
+      await campaign.save();
+      console.log(`📊 Purchase abandonment recorded for ${userEmail}, Time spent: ${timeSpent}s`);
+    }
+
+    // Check for abandonment follow-up trigger
+    const abandonmentTrigger = campaign.behaviorTriggers.find(t => 
+      t.behavior === 'abandonment' && t.enabled
+    );
+
+    if (abandonmentTrigger && abandonmentTrigger.followUpEmail) {
+      console.log(`📧 Sending abandonment follow-up email to ${userEmail}`);
+      
+      const emailService = require('../services/emailService');
+      await emailService.sendEmail({
+        to: userEmail,
+        subject: abandonmentTrigger.followUpEmail.subject || 'Don\'t miss out on this amazing offer!',
+        body: abandonmentTrigger.followUpEmail.body || `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #e74c3c;">⏰ Limited Time Offer!</h1>
+            <p>We noticed you were interested in our product but didn't complete your purchase.</p>
+            <p>Don't miss out on this amazing opportunity!</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${pageUrl}" style="
+                display: inline-block;
+                background: linear-gradient(45deg, #e74c3c, #c0392b);
+                color: white;
+                text-decoration: none;
+                padding: 15px 30px;
+                border-radius: 50px;
+                font-size: 16px;
+                font-weight: bold;
+              ">
+                🛒 Complete Your Purchase Now
+              </a>
+            </div>
+          </div>
+        `
+      });
+      
+      console.log(`✅ Abandonment follow-up email sent to ${userEmail}`);
+    }
+    
+    res.json({ success: true, message: 'Abandonment tracked successfully' });
+  } catch (error) {
+    console.error('Error tracking abandonment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test idle trigger manually (for debugging)
+router.post('/:id/test-idle-trigger', auth, async (req, res) => {
+  try {
+    const { userEmail, manualEmailIndex = 0 } = req.body;
+    
+    if (!userEmail) {
+      return res.status(400).json({ error: 'userEmail is required' });
+    }
+    
+    console.log(`⏰ Manually testing idle trigger for ${userEmail} in campaign ${req.params.id}`);
+    
+    const workerService = require('../services/workerService');
+    await workerService.processIdleTimeTrigger(req.params.id, userEmail, manualEmailIndex);
+    
+    res.json({ 
+      success: true, 
+      message: `Idle trigger processed for ${userEmail}`,
+      userEmail,
+      manualEmailIndex
+    });
+  } catch (error) {
+    console.error('Error testing idle trigger:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Debug endpoint to check campaign purchase settings
+router.get('/:id/purchase-settings', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findOne({
+      _id: req.params.id,
+      createdBy: req.user.id
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    res.json({
+      success: true,
+      purchaseSettings: {
+        purchaseCampaignType: campaign.purchaseCampaignType,
+        selectedPurchaseRecipients: campaign.selectedPurchaseRecipients,
+        purchaseFilter: campaign.purchaseFilter,
+        purchaseLinkText: campaign.purchaseLinkText,
+        purchaseAmount: campaign.purchaseAmount
+      },
+      campaign: {
+        id: campaign._id,
+        name: campaign.name,
+        status: campaign.status,
+        recipientsCount: campaign.recipients?.length || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error getting purchase settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send purchase campaign to selected recipients
+router.post('/:id/send-purchase-campaign', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findOne({
+      _id: req.params.id,
+      createdBy: req.user.id
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    // Debug: Log campaign purchase settings
+    console.log('🔍 Campaign purchase settings:', {
+      purchaseCampaignType: campaign.purchaseCampaignType,
+      selectedPurchaseRecipients: campaign.selectedPurchaseRecipients,
+      purchaseFilter: campaign.purchaseFilter,
+      purchaseLinkText: campaign.purchaseLinkText,
+      purchaseAmount: campaign.purchaseAmount
+    });
+
+    console.log('🔍 Campaign ID:', req.params.id);
+    console.log('🔍 Campaign name:', campaign.name);
+    console.log('🔍 Campaign status:', campaign.status);
+
+    if (!campaign.purchaseCampaignType) {
+      console.log('❌ purchaseCampaignType is undefined or null');
+      return res.status(400).json({ error: 'Purchase campaign type not configured' });
+    }
+
+    if (campaign.purchaseCampaignType === 'none') {
+      console.log('❌ purchaseCampaignType is set to "none"');
+      return res.status(400).json({ error: 'No purchase campaign configured' });
+    }
+
+    let targetRecipients = [];
+
+    // Determine target recipients based on campaign type
+    switch (campaign.purchaseCampaignType) {
+      case 'all':
+        targetRecipients = campaign.recipients.filter(r => r.status === 'active');
+        break;
+
+      case 'selected':
+        if (!campaign.selectedPurchaseRecipients || campaign.selectedPurchaseRecipients.length === 0) {
+          return res.status(400).json({ error: 'No recipients selected for purchase campaign' });
+        }
+        targetRecipients = campaign.recipients.filter(r => 
+          r.status === 'active' && campaign.selectedPurchaseRecipients.includes(r.email)
+        );
+        break;
+
+      case 'filtered':
+        targetRecipients = await getFilteredRecipients(campaign);
+        if (targetRecipients.length === 0) {
+          return res.status(400).json({ error: 'No recipients match the filter criteria' });
+        }
+        break;
+
+      default:
+        return res.status(400).json({ error: 'Invalid purchase campaign type' });
+    }
+
+    console.log(`🛒 Sending purchase campaign to ${targetRecipients.length} recipients`);
+
+    // Send purchase emails to target recipients
+    const emailService = require('../services/emailService');
+    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+    
+    let sentCount = 0;
+    const failedEmails = [];
+
+    for (const recipient of targetRecipients) {
+      try {
+        // Create purchase email content
+        const purchaseEmailContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h1 style="color: #333;">${campaign.name}</h1>
+            <p style="color: #666; line-height: 1.6;">
+              Hi ${recipient.name || 'there'},<br><br>
+              We have an exclusive offer just for you!
+            </p>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+              <h2 style="color: #2ecc71; margin-top: 0;">Special Offer</h2>
+              <p style="color: #666;">
+                ${campaign.description || 'Check out our amazing product!'}
+              </p>
+              <p style="font-size: 24px; color: #2ecc71; font-weight: bold; margin: 20px 0;">
+                $${campaign.purchaseAmount || 99.99}
+              </p>
+            </div>
+            
+            <p style="color: #666; line-height: 1.6;">
+              Don't miss out on this limited-time offer!
+            </p>
+          </div>
+        `;
+
+        console.log('📧 Purchase email content created for:', recipient.email);
+        console.log('📧 Campaign purchase settings:', {
+          purchaseCampaignType: campaign.purchaseCampaignType,
+          purchaseLinkText: campaign.purchaseLinkText,
+          purchaseAmount: campaign.purchaseAmount
+        });
+
+        // Add tracking and purchase button
+        const trackedEmailContent = emailService.addTrackingToEmail(
+          purchaseEmailContent,
+          campaign._id.toString(),
+          recipient.email,
+          baseUrl,
+          {
+            purchaseCampaignType: campaign.purchaseCampaignType,
+            purchaseLinkText: campaign.purchaseLinkText,
+            purchaseAmount: campaign.purchaseAmount
+          }
+        );
+
+        // Send the email
+        await emailService.sendEmail({
+          to: recipient.email,
+          subject: `Special Offer - ${campaign.name}`,
+          body: trackedEmailContent
+        });
+
+        // Add to manual emails array for idle trigger tracking
+        if (!recipient.manualEmails) {
+          recipient.manualEmails = [];
+        }
+        recipient.manualEmails.push({
+          sentAt: new Date(),
+          hasLinks: true, // Purchase emails always have links (purchase button)
+          timeDelayEmailSent: false,
+          idleEmailSent: false,
+          openFollowUpSent: false,
+          clickFollowUpSent: false,
+          purchaseFollowUpSent: false,
+          opened: false,
+          clicked: false,
+          purchased: false
+        });
+
+        // Update recipient's purchase campaign status
+        if (!recipient.purchaseCampaigns) {
+          recipient.purchaseCampaigns = [];
+        }
+        recipient.purchaseCampaigns.push({
+          sentAt: new Date(),
+          campaignType: campaign.purchaseCampaignType,
+          purchaseAmount: campaign.purchaseAmount,
+          purchaseLinkText: campaign.purchaseLinkText
+        });
+
+        // Schedule behavior triggers for this purchase email
+        const emailCampaignEngine = require('../services/emailCampaignEngine');
+        await emailCampaignEngine.scheduleTriggersForManualEmail(campaign._id.toString(), recipient.email);
+
+        sentCount++;
+        console.log(`✅ Purchase email sent to ${recipient.email}`);
+
+      } catch (error) {
+        console.error(`❌ Failed to send purchase email to ${recipient.email}:`, error);
+        failedEmails.push(recipient.email);
+      }
+    }
+
+    // Save campaign with updated recipient data
+    await campaign.save();
+
+    console.log(`📧 Purchase campaign completed. Sent: ${sentCount}, Failed: ${failedEmails.length}`);
+
+    res.json({
+      success: true,
+      message: `Purchase campaign sent to ${sentCount} recipients`,
+      sentCount,
+      failedEmails,
+      totalRecipients: targetRecipients.length
+    });
+
+  } catch (error) {
+    console.error('Error sending purchase campaign:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to get filtered recipients
+async function getFilteredRecipients(campaign) {
+  const filter = campaign.purchaseFilter;
+  const recipients = campaign.recipients.filter(r => r.status === 'active');
+
+  switch (filter.type) {
+    case 'opens':
+      return recipients.filter(r => 
+        r.manualEmails && r.manualEmails.some(email => email.opened)
+      );
+
+    case 'clicks':
+      return recipients.filter(r => 
+        r.manualEmails && r.manualEmails.some(email => email.clicked)
+      );
+
+    case 'purchases':
+      return recipients.filter(r => 
+        r.manualEmails && r.manualEmails.some(email => email.purchased)
+      );
+
+    case 'inactive':
+      return recipients.filter(r => 
+        !r.manualEmails || r.manualEmails.every(email => !email.opened && !email.clicked)
+      );
+
+    case 'new':
+      return recipients.filter(r => 
+        !r.manualEmails || r.manualEmails.length === 0
+      );
+
+    default:
+      return recipients;
+  }
+}
 
 // Send manual email to specific recipients
 router.post('/:id/send-to-recipients', auth, async (req, res) => {
@@ -528,6 +1005,411 @@ router.post('/queue/cleanup', auth, async (req, res) => {
   } catch (error) {
     console.error('Error cleaning up jobs:', error);
     res.status(500).json({ error: 'Failed to cleanup jobs' });
+  }
+});
+
+// Purchase page route - when users click purchase link from email
+router.get('/purchase/:campaignId/:userEmail', async (req, res) => {
+  try {
+    const { campaignId, userEmail } = req.params;
+    const decodedEmail = decodeURIComponent(userEmail);
+    
+    console.log(`🛒 Purchase page accessed: ${decodedEmail} in campaign ${campaignId}`);
+    
+    // Find the campaign
+    const campaign = await EmailCampaign.findById(campaignId);
+    if (!campaign) {
+      return res.status(404).send(`
+        <html>
+          <head><title>Campaign Not Found</title></head>
+          <body>
+            <h1>Campaign Not Found</h1>
+            <p>The campaign you're looking for doesn't exist.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Find the recipient
+    const recipient = campaign.recipients.find(r => r.email === decodedEmail);
+    if (!recipient) {
+      return res.status(404).send(`
+        <html>
+          <head><title>Recipient Not Found</title></head>
+          <body>
+            <h1>Recipient Not Found</h1>
+            <p>You are not registered for this campaign.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Track purchase page visit as "open" behavior
+    try {
+      const emailCampaignEngine = require('../services/emailCampaignEngine');
+      await emailCampaignEngine.handleUserBehavior(campaignId, decodedEmail, 'open');
+      console.log(`📊 Purchase page visit tracked as open for ${decodedEmail}`);
+    } catch (error) {
+      console.error('❌ Error tracking purchase page visit:', error);
+    }
+
+    // Generate purchase page HTML
+    const purchasePageHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Purchase Product - ${campaign.name}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+          }
+          .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+          }
+          .product-image {
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+          }
+          .product-title {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 10px;
+          }
+          .product-description {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+          }
+          .price {
+            font-size: 32px;
+            color: #2ecc71;
+            font-weight: bold;
+            margin-bottom: 30px;
+          }
+          .purchase-button {
+            background: linear-gradient(45deg, #2ecc71, #27ae60);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-bottom: 20px;
+          }
+          .purchase-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+          }
+          .purchase-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+          }
+          .features {
+            text-align: left;
+            margin: 30px 0;
+          }
+          .features h3 {
+            color: #333;
+            margin-bottom: 15px;
+          }
+          .features ul {
+            list-style: none;
+            padding: 0;
+          }
+          .features li {
+            padding: 8px 0;
+            color: #666;
+            position: relative;
+            padding-left: 25px;
+          }
+          .features li:before {
+            content: "✓";
+            color: #2ecc71;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+          }
+          .success-message {
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+          }
+          .error-message {
+            display: none;
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="product-image">PRODUCT</div>
+          <h1 class="product-title">${campaign.name}</h1>
+          <p class="product-description">
+            ${campaign.description || 'Amazing product that will transform your life!'}
+          </p>
+          <div class="price">$99.99</div>
+          
+          <button class="purchase-button" onclick="handlePurchase()" id="purchaseBtn">
+            Purchase Now
+          </button>
+          
+          <div class="features">
+            <h3>What you'll get:</h3>
+            <ul>
+              <li>Premium quality product</li>
+              <li>Fast worldwide shipping</li>
+              <li>30-day money-back guarantee</li>
+              <li>24/7 customer support</li>
+              <li>Exclusive bonus content</li>
+            </ul>
+          </div>
+          
+          <div class="success-message" id="successMessage">
+            <strong>Thank you for your purchase!</strong><br>
+            You will receive a confirmation email shortly.
+          </div>
+          
+          <div class="error-message" id="errorMessage">
+            <strong>Purchase failed!</strong><br>
+            Please try again or contact support.
+          </div>
+        </div>
+
+        <script>
+          let pageLoadTime = Date.now();
+          let timeSpent = 0;
+          let hasInteracted = false;
+          let abandonmentTracked = false;
+
+          // Track time spent on page
+          function updateTimeSpent() {
+            timeSpent = Math.floor((Date.now() - pageLoadTime) / 1000);
+          }
+
+          // Track abandonment when user leaves
+          function trackAbandonment() {
+            if (!abandonmentTracked && !hasInteracted) {
+              abandonmentTracked = true;
+              updateTimeSpent();
+              
+              fetch('/api/campaigns/${campaignId}/track-abandonment', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  userEmail: '${decodedEmail}',
+                  timeSpent: timeSpent,
+                  pageUrl: window.location.href
+                })
+              }).catch(error => console.error('Abandonment tracking error:', error));
+            }
+          }
+
+          // Track interactions
+          document.addEventListener('click', function() {
+            hasInteracted = true;
+          });
+
+          document.addEventListener('scroll', function() {
+            hasInteracted = true;
+          });
+
+          // Track when user leaves the page
+          window.addEventListener('beforeunload', trackAbandonment);
+          window.addEventListener('pagehide', trackAbandonment);
+
+          // Update time spent every 5 seconds
+          setInterval(updateTimeSpent, 5000);
+
+          async function handlePurchase() {
+            const button = document.getElementById('purchaseBtn');
+            const successMsg = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMessage');
+            
+            // Mark as interacted to prevent abandonment tracking
+            hasInteracted = true;
+            
+            // Disable button and show loading
+            button.disabled = true;
+            button.textContent = 'Processing...';
+            successMsg.style.display = 'none';
+            errorMsg.style.display = 'none';
+            
+            try {
+              const response = await fetch('/api/campaigns/${campaignId}/track-purchase', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  userEmail: '${decodedEmail}',
+                  purchaseAmount: 99.99,
+                  purchaseCurrency: 'USD',
+                  orderId: 'ORD-' + Date.now(),
+                  timeSpent: timeSpent
+                })
+              });
+              
+              const result = await response.json();
+              
+              if (result.success) {
+                successMsg.style.display = 'block';
+                button.textContent = 'Purchased!';
+                button.style.background = '#27ae60';
+                
+                // Redirect to thank you page after 3 seconds
+                setTimeout(() => {
+                  window.location.href = '/api/campaigns/thank-you/${campaignId}/${encodeURIComponent(decodedEmail)}';
+                }, 3000);
+              } else {
+                throw new Error(result.error || 'Purchase failed');
+              }
+            } catch (error) {
+              console.error('Purchase error:', error);
+              errorMsg.style.display = 'block';
+              button.disabled = false;
+              button.textContent = 'Purchase Now';
+            }
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    res.send(purchasePageHtml);
+    
+  } catch (error) {
+    console.error('❌ Error serving purchase page:', error);
+    res.status(500).send(`
+      <html>
+        <head><title>Error</title></head>
+        <body>
+          <h1>Error</h1>
+          <p>Something went wrong. Please try again later.</p>
+        </body>
+      </html>
+    `);
+  }
+});
+
+// Thank you page after purchase
+router.get('/thank-you/:campaignId/:userEmail', async (req, res) => {
+  try {
+    const { campaignId, userEmail } = req.params;
+    const decodedEmail = decodeURIComponent(userEmail);
+    
+    const thankYouHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Thank You for Your Purchase!</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            text-align: center;
+          }
+          .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .success-icon {
+            font-size: 80px;
+            color: #2ecc71;
+            margin-bottom: 20px;
+          }
+          .title {
+            font-size: 32px;
+            color: #333;
+            margin-bottom: 20px;
+          }
+          .message {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 30px;
+          }
+          .order-details {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: left;
+          }
+          .order-details h3 {
+            color: #333;
+            margin-bottom: 15px;
+          }
+          .order-details p {
+            margin: 5px 0;
+            color: #666;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="success-icon">✓</div>
+          <h1 class="title">Thank You for Your Purchase!</h1>
+          <p class="message">
+            Your order has been successfully processed. You will receive a confirmation email shortly with all the details.
+          </p>
+          
+          <div class="order-details">
+            <h3>Order Summary:</h3>
+            <p><strong>Product:</strong> Campaign Product</p>
+            <p><strong>Amount:</strong> $99.99 USD</p>
+            <p><strong>Order ID:</strong> ORD-${Date.now()}</p>
+            <p><strong>Email:</strong> ${decodedEmail}</p>
+          </div>
+          
+          <p class="message">
+            If you have any questions, please don't hesitate to contact our support team.
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    res.send(thankYouHtml);
+    
+  } catch (error) {
+    console.error('❌ Error serving thank you page:', error);
+    res.status(500).send('Error loading thank you page');
   }
 });
 
