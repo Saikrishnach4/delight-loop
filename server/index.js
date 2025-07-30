@@ -12,7 +12,10 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: [
+      process.env.CLIENT_URL || "http://localhost:3000",
+      "https://delight-loop.vercel.app"
+    ],
     methods: ["GET", "POST"]
   }
 });
@@ -21,7 +24,10 @@ const io = socketIo(server, {
 app.use(helmet());
 app.use(compression());
 app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:3000",
+  origin: [
+    process.env.CLIENT_URL || "http://localhost:3000",
+    "https://delight-loop.vercel.app"
+  ],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
