@@ -22,7 +22,6 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   Share as ShareIcon,
-  Group as GroupIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -41,12 +40,7 @@ const Dashboard = () => {
   
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { activeUsers, requestCollaborationCount } = useDashboard();
-
-  // Create a map of dashboard ID to active users count
-  const getActiveUsersForDashboard = (dashboardId) => {
-    return activeUsers.filter(user => user.dashboardId === dashboardId).length;
-  };
+  const { requestCollaborationCount } = useDashboard();
 
   // Refresh collaboration counts for all dashboards
   const refreshCollaborationCounts = () => {
@@ -272,13 +266,6 @@ const Dashboard = () => {
                   
                   <Box display="flex" alignItems="center" gap={1} mb={2}>
                     <Chip
-                      icon={<GroupIcon />}
-                      label={`${getActiveUsersForDashboard(dashboard._id)} active users`}
-                      size="small"
-                      variant="outlined"
-                      color="success"
-                    />
-                    <Chip
                       label={`${dashboard.widgets?.length || 0} widgets`}
                       size="small"
                       variant="outlined"
@@ -303,16 +290,7 @@ const Dashboard = () => {
                   >
                     Open Dashboard
                   </Button>
-                  <Button
-                    size="small"
-                    startIcon={<ShareIcon />}
-                    onClick={() => {
-                      // TODO: Implement share functionality
-                      toast.info('Share functionality coming soon!');
-                    }}
-                  >
-                    Share
-                  </Button>
+                 
                 </CardActions>
               </Card>
             </Grid>

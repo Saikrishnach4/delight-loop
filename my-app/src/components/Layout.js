@@ -29,7 +29,6 @@ import {
   Dashboard as DashboardIcon,
   Email as EmailIcon,
   Person as PersonIcon,
-  Notifications as NotificationsIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   Group as GroupIcon,
@@ -127,11 +126,7 @@ const Layout = () => {
               />
             )}
           </Typography>
-          <IconButton color="inherit">
-            <Badge badgeContent={4} color="error">
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
+
           <IconButton
             color="inherit"
             onClick={() => setShowCollaboration(true)}
