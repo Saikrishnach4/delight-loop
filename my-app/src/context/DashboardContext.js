@@ -117,7 +117,7 @@ export const DashboardProvider = ({ children }) => {
   useEffect(() => {
     if (token && !state.socket) {
       console.log('DashboardContext - Initializing socket connection');
-      const socket = io('http://localhost:5000', {
+      const socket = io('https://delight-loop.onrender.com', {
         auth: { token },
       });
 

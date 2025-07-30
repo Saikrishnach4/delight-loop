@@ -506,7 +506,7 @@ const CampaignAnalytics = () => {
                     onChange={(e) => {
                       const testUrl = e.target.value;
                       if (testUrl) {
-                        const trackingLink = `http://localhost:5000/api/campaigns/track/click/${campaignId}/${encodeURIComponent(recipient.email)}?url=${encodeURIComponent(testUrl)}`;
+                                                 const trackingLink = `https://delight-loop.onrender.com/api/campaigns/track/click/${campaignId}/${encodeURIComponent(recipient.email)}?url=${encodeURIComponent(testUrl)}`;
                         // Store the link temporarily for this recipient
                         recipient.trackingLink = trackingLink;
                       }
