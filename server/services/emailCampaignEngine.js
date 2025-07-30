@@ -1,14 +1,13 @@
 const EmailCampaign = require('../models/EmailCampaign');
-const User = require('../models/User');
 const emailService = require('./emailService');
 const queueManager = require('./queueManager');
 
 class EmailCampaignEngine {
   constructor() {
-    this.processingQueue = new Map();
+    this.timeTriggerInterval = null;
   }
 
-  // Send manual email to all recipients
+  // Send manual email to all active recipients
   async sendManualEmail(campaignId) {
     try {
       console.log(`📧 Starting manual email send for campaign ${campaignId}`);
@@ -20,7 +19,11 @@ class EmailCampaignEngine {
 
       const activeRecipients = campaign.recipients.filter(r => r.status === 'active');
       console.log(`📧 Found ${activeRecipients.length} active recipients`);
-      
+
+      if (activeRecipients.length === 0) {
+        throw new Error('No active recipients found');
+      }
+
       let sentCount = 0;
       
       for (const recipient of activeRecipients) {
@@ -43,493 +46,176 @@ class EmailCampaignEngine {
           
           recipient.manualEmails.push({
             sentAt: new Date(),
+            hasLinks: hasLinks,
             timeDelayEmailSent: false,
             idleEmailSent: false,
-            hasLinks: hasLinks,
             openFollowUpSent: false,
             clickFollowUpSent: false,
             opened: false,
-            clicked: false
+            clicked: false,
+            purchasePageVisited: false
           });
           
-          console.log(`📧 Added manual email entry for ${recipient.email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
-          if (hasLinks) {
-            console.log(`📧 Email contains links - email has passed through Email Template`);
-            console.log(`📧 Idle time checking will now be enabled for ${recipient.email} (manual email ${recipient.manualEmails.length})`);
-          } else {
-            console.log(`📧 Email does not contain links - idle time checking will only be enabled after Time Delay Trigger (if configured)`);
-          }
-          
           sentCount++;
-          console.log(`✅ Manual email sent successfully to ${recipient.email}`);
+          console.log(`✅ Manual email sent to ${recipient.email}`);
           
         } catch (error) {
           console.error(`❌ Failed to send manual email to ${recipient.email}:`, error);
-          // Continue with other recipients even if one fails
         }
       }
 
-      // Update analytics and save campaign
-      campaign.analytics.totalSent += sentCount;
+      // Save campaign with updated recipients
       await campaign.save();
-
-      // Schedule triggers after saving the campaign
+      
+      // Schedule triggers for each sent email
       for (const recipient of activeRecipients) {
         if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+          const manualEmailIndex = recipient.manualEmails.length - 1;
           try {
-            await this.scheduleTriggersForManualEmail(campaign._id, recipient.email, recipient.manualEmails.length - 1);
+            await this.scheduleTriggersForManualEmail(campaignId, recipient.email, manualEmailIndex);
           } catch (error) {
-            console.error(`❌ Error scheduling triggers for ${recipient.email}:`, error);
-            // Don't fail the entire operation for trigger scheduling errors
+            console.error(`❌ Failed to schedule triggers for ${recipient.email}:`, error);
           }
         }
       }
-
-      console.log(`📧 Manual email send completed. Sent to ${sentCount} recipients`);
-      return { sent: sentCount };
+      
+      console.log(`✅ Manual email sent to ${sentCount} recipients for campaign: ${campaign.name}`);
+      return { success: true, sentCount };
+      
     } catch (error) {
       console.error('❌ Error sending manual email:', error);
       throw error;
     }
   }
 
-  // Send a single email with tracking
+  // Send single email to a recipient
   async sendSingleEmail(campaign, recipientEmail, emailTemplate) {
     try {
-      console.log(`📧 Sending email to ${recipientEmail} for campaign: ${campaign.name}`);
+      console.log(`📧 Sending single email to ${recipientEmail}`);
       
-      // Add tracking to email content
-      const trackedEmailContent = emailService.addTrackingToEmail(
-        emailTemplate.body,
+      // Add tracking to email
+      const emailWithTracking = await emailService.addTrackingToEmail(
+        emailTemplate,
         campaign._id.toString(),
-        recipientEmail
+        recipientEmail,
+        campaign
       );
       
-      const emailData = {
-        to: recipientEmail,
-        subject: emailTemplate.subject,
-        body: trackedEmailContent
-      };
+      // Send email
+      await emailService.sendEmail(recipientEmail, emailWithTracking.subject, emailWithTracking.body);
       
-      const result = await emailService.sendEmail(emailData);
-      console.log(`✅ Email sent successfully to ${recipientEmail}:`, result.messageId);
+      console.log(`✅ Single email sent to ${recipientEmail}`);
       
-      return result;
     } catch (error) {
-      console.error(`❌ Error sending email to ${recipientEmail}:`, error);
+      console.error(`❌ Error sending single email to ${recipientEmail}:`, error);
       throw error;
     }
   }
 
-  // Handle user behavior (open, click, idle) and send follow-up emails
+  // Handle user behavior (open, click, purchase, etc.)
   async handleUserBehavior(campaignId, userEmail, behavior, additionalData = {}) {
     try {
-      console.log(`🎯 Handling user behavior: ${behavior} for ${userEmail} in campaign ${campaignId}`);
+      console.log(`📊 Handling user behavior: ${behavior} for ${userEmail} in campaign ${campaignId}`);
       
       const campaign = await EmailCampaign.findById(campaignId);
       if (!campaign) {
-        console.log(`❌ Campaign ${campaignId} not found`);
-        return { success: false, message: 'Campaign not found' };
+        throw new Error('Campaign not found');
       }
 
-      // Find the recipient
       const recipient = campaign.recipients.find(r => r.email === userEmail);
       if (!recipient) {
-        console.log(`❌ Recipient ${userEmail} not found in campaign ${campaignId}`);
-        return { success: false, message: 'Recipient not found' };
+        throw new Error('Recipient not found');
       }
 
-      // Update recipient's last activity
-      recipient.lastActivity = new Date();
-      
-      // Update analytics and track actual interactions
-      if (behavior === 'open') {
-        campaign.analytics.totalOpens += 1;
-        console.log(`📊 Updated opens count for campaign ${campaign.name}`);
+      if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+        const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
         
-        // Mark the most recent manual email as opened
-        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
-          const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+        if (behavior === 'open') {
           latestEmail.opened = true;
-          latestEmail.openedAt = new Date();
           console.log(`📧 Marked latest email as opened for ${userEmail}`);
-        }
-      } else if (behavior === 'click') {
-        campaign.analytics.totalClicks += 1;
-        console.log(`📊 Updated clicks count for campaign ${campaign.name}`);
-        
-        // Mark the most recent manual email as clicked
-        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
-          const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+        } else if (behavior === 'click') {
           latestEmail.clicked = true;
-          latestEmail.clickedAt = new Date();
           console.log(`📧 Marked latest email as clicked for ${userEmail}`);
-        }
-      } else if (behavior === 'purchase') {
-        campaign.analytics.totalPurchases += 1;
-        const purchaseAmount = additionalData.purchaseAmount || 0;
-        campaign.analytics.totalRevenue += purchaseAmount;
-        console.log(`📊 Updated purchases count for campaign ${campaign.name}, Revenue: $${purchaseAmount}`);
-        
-        // Mark the most recent manual email as purchased
-        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
-          const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+        } else if (behavior === 'purchase') {
           latestEmail.purchased = true;
           latestEmail.purchasedAt = new Date();
-          latestEmail.purchaseAmount = purchaseAmount;
+          latestEmail.purchaseAmount = additionalData.purchaseAmount || 99.99;
           latestEmail.purchaseCurrency = additionalData.purchaseCurrency || 'USD';
-          console.log(`📧 Marked latest email as purchased for ${userEmail}, Amount: $${purchaseAmount}`);
-        }
-      }
-
-      // Check if there's a behavior trigger for this action
-      const behaviorTrigger = campaign.behaviorTriggers.find(trigger => 
-        trigger.behavior === behavior && trigger.enabled
-      );
-
-      if (behaviorTrigger && behaviorTrigger.followUpEmail) {
-        console.log(`📧 Found behavior trigger for ${behavior}, checking if follow-up already sent...`);
-        
-        // Check if we already sent a follow-up for this behavior
-        // We'll track this by adding a flag to the most recent manual email
-        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
-          const latestManualEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+          console.log(`📧 Marked latest email as purchased for ${userEmail}`);
           
-          // Check if we already sent a follow-up for this behavior
-          const behaviorKey = `${behavior}FollowUpSent`;
-          if (latestManualEmail[behaviorKey]) {
-            console.log(`⏭️ Skipping ${behavior} follow-up for ${userEmail} - already sent for this manual email`);
-          } else {
-            console.log(`📧 Sending ${behavior} follow-up email to ${userEmail}`);
-            
-            // Send the follow-up email
-            await this.sendSingleEmail(campaign, userEmail, behaviorTrigger.followUpEmail);
-            
-            // Mark that we sent the follow-up for this behavior
-            latestManualEmail[behaviorKey] = true;
-            
-            // Update analytics
-            campaign.analytics.totalSent += 1;
-            
-            console.log(`✅ Sent ${behavior} follow-up email to ${userEmail}`);
-          }
-        } else {
-          console.log(`⚠️ No manual emails found for ${userEmail}, cannot send behavior follow-up`);
+          // Update campaign analytics
+          campaign.analytics.totalPurchases = (campaign.analytics.totalPurchases || 0) + 1;
+          campaign.analytics.totalRevenue = (campaign.analytics.totalRevenue || 0) + (additionalData.purchaseAmount || 99.99);
+        } else if (behavior === 'purchasePageVisit') {
+          latestEmail.purchasePageVisited = true;
+          latestEmail.purchasePageVisitedAt = new Date();
+          console.log(`📧 Marked latest email as purchase page visited for ${userEmail}`);
         }
-      } else {
-        console.log(`ℹ️ No behavior trigger found for ${behavior} or trigger is disabled`);
       }
 
-      // Save the campaign
+      // Check for behavior triggers
+      const triggerResult = await this.checkBehaviorTriggers(campaign, userEmail, behavior);
+      
       await campaign.save();
       
-      return { 
-        success: true, 
-        message: `Behavior ${behavior} recorded and processed`,
-        followUpSent: !!behaviorTrigger?.followUpEmail
+      return {
+        success: true,
+        message: `Behavior ${behavior} recorded for ${userEmail}`,
+        followUpSent: triggerResult.followUpSent
       };
       
     } catch (error) {
-      console.error('❌ Error handling user behavior:', error);
-      return { success: false, message: error.message };
+      console.error(`❌ Error handling user behavior for ${userEmail}:`, error);
+      return {
+        success: false,
+        message: error.message
+      };
     }
   }
 
-  // Check for behavior-based triggers
+  // Check for behavior triggers
   async checkBehaviorTriggers(campaign, userEmail, behavior) {
     try {
-      const behaviorTrigger = campaign.behaviorTriggers.find(t => 
-        t.behavior === behavior && t.enabled
+      console.log(`🔍 Checking behavior triggers for ${behavior} from ${userEmail}`);
+      
+      const behaviorTriggers = campaign.behaviorTriggers.filter(t => 
+        t.behavior === behavior && t.enabled && t.followUpEmail
       );
-
-      if (behaviorTrigger && behaviorTrigger.followUpEmail) {
-        // Send follow-up email based on behavior
-        await this.sendSingleEmail(campaign, userEmail, behaviorTrigger.followUpEmail);
-        
-        // Update analytics
-        campaign.analytics.totalSent += 1;
-        await campaign.save();
+      
+      if (behaviorTriggers.length === 0) {
+        console.log(`⏭️ No enabled ${behavior} triggers found`);
+        return { followUpSent: false };
       }
-
+      
+      const trigger = behaviorTriggers[0]; // Use first matching trigger
+      console.log(`✅ Found ${behavior} trigger with follow-up email`);
+      
+      // Send follow-up email
+      await this.sendSingleEmail(campaign, userEmail, trigger.followUpEmail);
+      
+      // Mark follow-up as sent
+      const recipient = campaign.recipients.find(r => r.email === userEmail);
+      if (recipient && recipient.manualEmails && recipient.manualEmails.length > 0) {
+        const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
+        if (behavior === 'open') {
+          latestEmail.openFollowUpSent = true;
+        } else if (behavior === 'click') {
+          latestEmail.clickFollowUpSent = true;
+        }
+      }
+      
+      console.log(`✅ ${behavior} follow-up email sent to ${userEmail}`);
+      return { followUpSent: true };
+      
     } catch (error) {
-      console.error('Error checking behavior triggers:', error);
+      console.error(`❌ Error checking behavior triggers for ${behavior}:`, error);
+      return { followUpSent: false };
     }
   }
 
-  // Check for time-based triggers
-  async checkTimeTriggers() {
-    try {
-      console.log('⏰ Checking time delay triggers...', new Date().toLocaleTimeString());
-      
-      const allCampaigns = await EmailCampaign.find({});
-      console.log(`📧 Total campaigns in database: ${allCampaigns.length}`);
-      
-      const activeCampaigns = await EmailCampaign.find({ 
-        status: 'active', 
-        'timeDelayTrigger.enabled': true 
-      });
-      
-      console.log(`📧 Found ${activeCampaigns.length} active campaigns with time delay triggers`);
-      
-      if (activeCampaigns.length === 0) {
-        console.log('⚠️ No active campaigns with enabled time delay triggers found');
-        return;
-      }
-
-      for (const campaign of activeCampaigns) {
-        console.log(`📧 Checking campaign: ${campaign.name}`);
-        console.log(`📧 Campaign time delay config:`, {
-          enabled: campaign.timeDelayTrigger.enabled,
-          days: campaign.timeDelayTrigger.days,
-          hours: campaign.timeDelayTrigger.hours,
-          minutes: campaign.timeDelayTrigger.minutes,
-          hasFollowUpEmail: !!campaign.timeDelayTrigger.followUpEmail
-        });
-        
-        const emailsToSend = [];
-        
-        console.log(`📧 Campaign has ${campaign.recipients.length} recipients`);
-        
-        for (const recipient of campaign.recipients) {
-          console.log(`📧 Checking recipient: ${recipient.email}`);
-          
-          if (recipient.status !== 'active') {
-            console.log(`⏭️ Skipping ${recipient.email} - not active`);
-            continue;
-          }
-          
-          if (!recipient.manualEmails || recipient.manualEmails.length === 0) {
-            console.log(`⏭️ Skipping ${recipient.email} - no manual emails sent yet`);
-            continue;
-          }
-          
-          // Check each manual email for follow-up
-          for (let i = 0; i < recipient.manualEmails.length; i++) {
-            const manualEmail = recipient.manualEmails[i];
-            
-            if (manualEmail.timeDelayEmailSent) {
-              console.log(`⏭️ Skipping manual email ${i + 1} for ${recipient.email} - follow-up already sent`);
-              continue;
-            }
-            
-            const timeSinceManualEmail = Date.now() - manualEmail.sentAt.getTime();
-            const triggerTime = (campaign.timeDelayTrigger.days * 24 * 60 * 60 * 1000) + 
-                               (campaign.timeDelayTrigger.hours * 60 * 60 * 1000) +
-                               (campaign.timeDelayTrigger.minutes * 60 * 1000);
-
-            const minutesSince = Math.round(timeSinceManualEmail / 1000 / 60);
-            const minutesTrigger = Math.round(triggerTime / 1000 / 60);
-            const minutesRemaining = Math.round((triggerTime - timeSinceManualEmail) / 1000 / 60);
-            const secondsSince = Math.round(timeSinceManualEmail / 1000);
-
-            console.log(`⏱️ ${recipient.email} (manual email ${i + 1}): ${minutesSince}m ${secondsSince % 60}s since manual email (${manualEmail.sentAt.toLocaleTimeString()}), trigger at ${minutesTrigger}m`);
-            
-            if (timeSinceManualEmail >= triggerTime) {
-              emailsToSend.push({
-                email: recipient.email,
-                manualEmailIndex: i
-              });
-              console.log(`✅ ${recipient.email} (manual email ${i + 1}) will receive time delay email (${minutesSince}m ${secondsSince % 60}s >= ${minutesTrigger}m)`);
-            } else {
-              console.log(`⏳ ${recipient.email} (manual email ${i + 1}) - not ready yet (${minutesRemaining}m ${Math.round((triggerTime - timeSinceManualEmail) / 1000) % 60}s remaining, ${minutesSince}m ${secondsSince % 60}s/${minutesTrigger}m)`);
-            }
-          }
-        }
-
-        if (emailsToSend.length > 0 && campaign.timeDelayTrigger.followUpEmail) {
-          console.log(`📧 Sending ${emailsToSend.length} time delay emails for campaign: ${campaign.name}`);
-          console.log(`📧 Recipients to receive follow-up: ${emailsToSend.map(e => `${e.email} (manual email ${e.manualEmailIndex + 1})`).join(', ')}`);
-          
-          for (const emailData of emailsToSend) {
-            try {
-              console.log(`📧 Sending follow-up email to: ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
-              await this.sendSingleEmail(campaign, emailData.email, campaign.timeDelayTrigger.followUpEmail);
-              
-              // Mark time delay email as sent for this specific manual email
-              const recipient = campaign.recipients.find(r => r.email === emailData.email);
-              if (recipient && recipient.manualEmails[emailData.manualEmailIndex]) {
-                recipient.manualEmails[emailData.manualEmailIndex].timeDelayEmailSent = true;
-                // Mark follow-up email as having links for idle tracking
-                recipient.manualEmails[emailData.manualEmailIndex].hasLinks = true;
-                console.log(`✅ Time delay email sent and marked for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1}) - email has now passed through Time Delay Trigger`);
-                console.log(`📧 Idle time checking will now be enabled for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
-              } else {
-                console.error(`❌ Recipient or manual email not found for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
-              }
-            } catch (error) {
-              console.error(`❌ Failed to send time delay email to ${emailData.email} (manual email ${emailData.manualEmailIndex + 1}):`, error);
-              // Continue with other recipients even if one fails
-            }
-          }
-
-          // Update analytics and save campaign
-          campaign.analytics.totalSent += emailsToSend.length;
-          await campaign.save();
-          
-          console.log(`✅ Sent ${emailsToSend.length} time delay emails for campaign: ${campaign.name}`);
-        } else if (emailsToSend.length > 0) {
-          console.log(`⚠️ No follow-up email configured for campaign: ${campaign.name}`);
-        } else {
-          console.log(`📧 No emails to send for campaign: ${campaign.name}`);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error checking time triggers:', error);
-    }
-  }
-
-  // Check for idle time triggers
-  // IMPORTANT: Idle time checking starts when ANY email sent to the user contains links:
-  // 1. Original Email Template (contains links) OR
-  // 2. Time Delay Follow-up Email (contains links)
-  async checkIdleTimeTriggers() {
-    try {
-      console.log('⏰ Checking idle time triggers...', new Date().toLocaleTimeString());
-      console.log('📋 IDLE TIME LOGIC: Checking emails where ANY email sent to the user contains links (original email OR time delay follow-up)');
-      
-      const allCampaigns = await EmailCampaign.find({});
-      console.log(`📧 Total campaigns in database: ${allCampaigns.length}`);
-      
-      const activeCampaigns = await EmailCampaign.find({ 
-        status: 'active'
-      });
-      
-      console.log(`📧 Found ${activeCampaigns.length} active campaigns`);
-      
-      if (activeCampaigns.length === 0) {
-        console.log('⚠️ No active campaigns found');
-        return;
-      }
-
-      for (const campaign of activeCampaigns) {
-        console.log(`📧 Checking campaign: ${campaign.name}`);
-        
-        // Find idle behavior triggers
-        const idleTriggers = campaign.behaviorTriggers.filter(t => 
-          t.behavior === 'idle' && t.enabled && t.idleTime?.enabled
-        );
-        
-        if (idleTriggers.length === 0) {
-          console.log(`📧 No enabled idle triggers found for campaign: ${campaign.name}`);
-          continue;
-        }
-
-        console.log(`📧 Found ${idleTriggers.length} idle triggers for campaign: ${campaign.name}`);
-        
-        for (const idleTrigger of idleTriggers) {
-          console.log(`📧 Checking idle trigger with ${idleTrigger.idleTime.minutes} minutes timeout`);
-          
-          const emailsToSend = [];
-          
-          for (const recipient of campaign.recipients) {
-            if (recipient.status !== 'active') {
-              continue;
-            }
-            
-            // Check each manual email for idle time
-            if (recipient.manualEmails && recipient.manualEmails.length > 0) {
-              for (let i = 0; i < recipient.manualEmails.length; i++) {
-                const manualEmail = recipient.manualEmails[i];
-                
-                // Skip if idle email already sent for this manual email
-                if (manualEmail.idleEmailSent) {
-                  console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - idle email already sent`);
-                  continue;
-                }
-                
-                // Check if user has already interacted with this email (opened or clicked)
-                // If they have, don't send idle email
-                if (manualEmail.openFollowUpSent || manualEmail.clickFollowUpSent) {
-                  console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - user already interacted (opened: ${manualEmail.openFollowUpSent}, clicked: ${manualEmail.clickFollowUpSent})`);
-                  continue;
-                }
-                
-                // IDLE TIME LOGIC: Start idle checking if ANY email sent to this user contains links
-                // This includes: original email template OR time delay follow-up email
-                
-                // Check if the original email template contains links
-                const originalEmailHasLinks = manualEmail.hasLinks;
-                
-                // Check if time delay follow-up email was sent (which would contain links)
-                const timeDelayEmailSent = manualEmail.timeDelayEmailSent;
-                
-                // Check if campaign has time delay trigger with follow-up email that contains links
-                const timeDelayFollowUpHasLinks = campaign.timeDelayTrigger?.enabled && 
-                                                 campaign.timeDelayTrigger?.followUpEmail?.body && 
-                                                 (campaign.timeDelayTrigger.followUpEmail.body.includes('<a href=') || 
-                                                  campaign.timeDelayTrigger.followUpEmail.body.includes('http://') || 
-                                                  campaign.timeDelayTrigger.followUpEmail.body.includes('https://'));
-                
-                // Start idle time if ANY email contains links
-                const anyEmailHasLinks = originalEmailHasLinks || (timeDelayEmailSent && timeDelayFollowUpHasLinks);
-                
-                if (!anyEmailHasLinks) {
-                  console.log(`⏭️ Skipping ${recipient.email} (manual email ${i + 1}) - no emails sent to this user contain links`);
-                  continue;
-                }
-                
-                // Log which email(s) contain links
-                let linkSource = [];
-                if (originalEmailHasLinks) linkSource.push('Original Email Template');
-                if (timeDelayEmailSent && timeDelayFollowUpHasLinks) linkSource.push('Time Delay Follow-up Email');
-                
-                console.log(`✅ ${recipient.email} (manual email ${i + 1}) - idle time checking enabled because links found in: ${linkSource.join(' and ')}`);
-                
-                const timeSinceManualEmail = Date.now() - manualEmail.sentAt.getTime();
-                const idleTimeMs = idleTrigger.idleTime.minutes * 60 * 1000;
-                
-                const minutesSince = Math.round(timeSinceManualEmail / 1000 / 60);
-                const minutesIdle = Math.round(idleTimeMs / 1000 / 60);
-                
-                console.log(`⏱️ ${recipient.email} (manual email ${i + 1}): ${minutesSince}m since manual email, idle timeout: ${minutesIdle}m`);
-                
-                if (timeSinceManualEmail >= idleTimeMs) {
-                  emailsToSend.push({
-                    email: recipient.email,
-                    manualEmailIndex: i
-                  });
-                  console.log(`✅ ${recipient.email} (manual email ${i + 1}) will receive idle reminder email (${minutesSince}m >= ${minutesIdle}m)`);
-                }
-              }
-            }
-          }
-
-          if (emailsToSend.length > 0 && idleTrigger.followUpEmail) {
-            console.log(`📧 Sending ${emailsToSend.length} idle reminder emails for campaign: ${campaign.name}`);
-            
-            for (const emailData of emailsToSend) {
-              try {
-                console.log(`📧 Sending idle reminder email to: ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
-                await this.sendSingleEmail(campaign, emailData.email, idleTrigger.followUpEmail);
-                
-                // Mark idle email as sent for this specific manual email
-                const recipient = campaign.recipients.find(r => r.email === emailData.email);
-                if (recipient && recipient.manualEmails[emailData.manualEmailIndex]) {
-                  recipient.manualEmails[emailData.manualEmailIndex].idleEmailSent = true;
-                  console.log(`✅ Idle reminder email sent and marked for ${emailData.email} (manual email ${emailData.manualEmailIndex + 1})`);
-                }
-              } catch (error) {
-                console.error(`❌ Failed to send idle reminder email to ${emailData.email}:`, error);
-              }
-            }
-
-            // Update analytics and save campaign
-            campaign.analytics.totalSent += emailsToSend.length;
-            await campaign.save();
-            
-            console.log(`✅ Sent ${emailsToSend.length} idle reminder emails for campaign: ${campaign.name}`);
-          } else if (emailsToSend.length > 0) {
-            console.log(`⚠️ No idle reminder email configured for campaign: ${campaign.name}`);
-          }
-        }
-      }
-      
-      console.log('📋 IDLE TIME SUMMARY: Completed checking all campaigns for idle time triggers');
-      console.log('📋 Remember: Idle time starts counting when ANY email sent to the user contains links (original email OR time delay follow-up)');
-    } catch (error) {
-      console.error('❌ Error checking idle time triggers:', error);
-    }
-  }
+  // OLD TRIGGER CHECKING METHODS REMOVED - NOW USING REDIS/BULLMQ QUEUES
+  // Time delay and idle triggers are now scheduled individually when emails are sent
+  // and processed by dedicated workers in workerService.js
 
   // Add recipient to campaign
   async addRecipient(campaignId, email, name = '') {
@@ -549,7 +235,7 @@ class EmailCampaignEngine {
         email,
         name,
         lastActivity: new Date(),
-        manualEmails: [], // Initialize empty array for manual emails
+        manualEmails: [],
         status: 'active'
       });
 
@@ -604,6 +290,12 @@ class EmailCampaignEngine {
         totalSent: campaign.analytics.totalSent || 0,
         totalOpens: campaign.analytics.totalOpens || 0,
         totalClicks: campaign.analytics.totalClicks || 0,
+        totalPurchases: campaign.analytics.totalPurchases || 0,
+        totalRevenue: campaign.analytics.totalRevenue || 0,
+        timeDelayTriggersScheduled: campaign.analytics.timeDelayTriggersScheduled || 0,
+        idleTriggersScheduled: campaign.analytics.idleTriggersScheduled || 0,
+        timeDelayEmailsSent: campaign.analytics.timeDelayEmailsSent || 0,
+        idleEmailsSent: campaign.analytics.idleEmailsSent || 0,
         // Calculate rates
         openRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalOpens || 0) / campaign.analytics.totalSent * 100).toFixed(1) : 0,
         clickRate: campaign.analytics.totalSent > 0 ? ((campaign.analytics.totalClicks || 0) / campaign.analytics.totalSent * 100).toFixed(1) : 0,
@@ -620,6 +312,7 @@ class EmailCampaignEngine {
           // Track actual opens and clicks
           const totalOpens = recipient.manualEmails ? recipient.manualEmails.filter(me => me.opened).length : 0;
           const totalClicks = recipient.manualEmails ? recipient.manualEmails.filter(me => me.clicked).length : 0;
+          const totalPurchases = recipient.manualEmails ? recipient.manualEmails.filter(me => me.purchased).length : 0;
           const totalBehaviorEmails = totalOpens + totalClicks;
           
           console.log(`📊 ${recipient.email} - Opens: ${totalOpens}, Clicks: ${totalClicks}, Follow-ups: ${totalFollowUps}`);
@@ -634,9 +327,10 @@ class EmailCampaignEngine {
             followUpsSent: totalFollowUps,
             idleEmailsSent: totalIdleEmails,
             emailsWithLinks: recipient.manualEmails ? recipient.manualEmails.filter(me => me.hasLinks).length : 0,
-            // Behavior tracking (using follow-up counts as proxy for actual interactions)
+            // Behavior tracking
             totalOpens: totalOpens,
             totalClicks: totalClicks,
+            totalPurchases: totalPurchases,
             totalBehaviorEmails: totalBehaviorEmails,
             // Rates
             openRate: recipient.manualEmails && recipient.manualEmails.length > 0 ? (totalOpens / recipient.manualEmails.length * 100).toFixed(1) : 0,
@@ -651,22 +345,27 @@ class EmailCampaignEngine {
               clickFollowUpSent: me.clickFollowUpSent || false,
               opened: me.opened || false,
               clicked: me.clicked || false,
-              openedAt: me.openedAt,
-              clickedAt: me.clickedAt
+              purchased: me.purchased || false,
+              purchasedAt: me.purchasedAt,
+              purchaseAmount: me.purchaseAmount,
+              purchaseCurrency: me.purchaseCurrency,
+              purchasePageVisited: me.purchasePageVisited || false,
+              purchasePageVisitedAt: me.purchasePageVisitedAt
             })) : []
           };
         })
       };
 
-      console.log(`📊 Final analytics object:`, analytics);
+      console.log(`📊 Analytics calculated for campaign: ${campaign.name}`);
       return analytics;
+      
     } catch (error) {
       console.error('❌ Error getting campaign analytics:', error);
       throw error;
     }
   }
 
-  // Start time-based trigger checking (now handled by BullMQ queues)
+  // Start time trigger checking (now just a placeholder for BullMQ system)
   startTimeTriggerChecking() {
     console.log('⏰ BullMQ queue-based trigger system is active');
     console.log('✅ Time delay and idle time triggers are now handled by Redis queues');
@@ -683,9 +382,6 @@ class EmailCampaignEngine {
     return this.timeTriggerInterval === 'bullmq-active';
   }
 
-  // Note: processTimeDelayTrigger and processIdleTimeTrigger methods moved to workerService.js
-  // to avoid circular dependency with queueManager
-
   // Schedule triggers when manual email is sent
   async scheduleTriggersForManualEmail(campaignId, recipientEmail, manualEmailIndex) {
     try {
@@ -699,26 +395,70 @@ class EmailCampaignEngine {
         throw new Error('Recipient not found');
       }
 
-      const manualEmail = recipient.manualEmails[manualEmailIndex];
+      let manualEmail = recipient.manualEmails[manualEmailIndex];
+      let actualEmailIndex = manualEmailIndex;
+      
       if (!manualEmail) {
         console.log(`⚠️ Manual email not found for ${recipientEmail} at index ${manualEmailIndex}. Available emails: ${recipient.manualEmails.length}`);
-        return; // Exit gracefully instead of throwing error
+        console.log(`🔍 Available manual emails:`, recipient.manualEmails.map((me, i) => ({ index: i, sentAt: me.sentAt })));
+        // Try to use the last email instead
+        if (recipient.manualEmails.length > 0) {
+          actualEmailIndex = recipient.manualEmails.length - 1;
+          console.log(`🔄 Using last email index ${actualEmailIndex} instead of ${manualEmailIndex}`);
+          manualEmail = recipient.manualEmails[actualEmailIndex];
+          if (manualEmail) {
+            console.log(`✅ Found last email at index ${actualEmailIndex}, proceeding with trigger scheduling`);
+          } else {
+            console.log(`❌ Last email not found either, skipping trigger scheduling`);
+            return;
+          }
+        } else {
+          console.log(`❌ No manual emails found, skipping trigger scheduling`);
+          return;
+        }
       }
 
       // Schedule time delay trigger if enabled
+      console.log(`🔍 Checking time delay trigger for ${recipientEmail}:`);
+      console.log(`   - Campaign timeDelayTrigger:`, JSON.stringify(campaign.timeDelayTrigger, null, 2));
+      console.log(`   - Enabled: ${campaign.timeDelayTrigger?.enabled}`);
+      console.log(`   - Has follow-up email: ${!!campaign.timeDelayTrigger?.followUpEmail}`);
+      console.log(`   - Follow-up email subject: ${campaign.timeDelayTrigger?.followUpEmail?.subject}`);
+      console.log(`   - Follow-up email body length: ${campaign.timeDelayTrigger?.followUpEmail?.body?.length || 0}`);
+      
       if (campaign.timeDelayTrigger?.enabled && campaign.timeDelayTrigger?.followUpEmail) {
-        const triggerTime = (campaign.timeDelayTrigger.days * 24 * 60 * 60 * 1000) + 
-                           (campaign.timeDelayTrigger.hours * 60 * 60 * 1000) +
-                           (campaign.timeDelayTrigger.minutes * 60 * 1000);
+        const days = campaign.timeDelayTrigger.days || 0;
+        const hours = campaign.timeDelayTrigger.hours || 0;
+        const minutes = campaign.timeDelayTrigger.minutes || 0;
+        
+        const triggerTime = (days * 24 * 60 * 60 * 1000) + 
+                           (hours * 60 * 60 * 1000) +
+                           (minutes * 60 * 1000);
+        
+        console.log(`⏰ Time delay trigger configuration:`);
+        console.log(`   - Days: ${days}`);
+        console.log(`   - Hours: ${hours}`);
+        console.log(`   - Minutes: ${minutes}`);
+        console.log(`   - Total trigger time: ${triggerTime}ms (${triggerTime / 1000 / 60} minutes)`);
+        console.log(`   - Will execute at: ${new Date(Date.now() + triggerTime).toISOString()}`);
         
         await queueManager.scheduleTimeDelayTrigger(
           campaignId,
           recipientEmail,
-          manualEmailIndex,
+          actualEmailIndex,
           triggerTime
         );
         
-        console.log(`⏰ Scheduled time delay trigger for ${recipientEmail} (manual email ${manualEmailIndex + 1}) in ${triggerTime}ms`);
+        console.log(`✅ Time delay trigger scheduled for ${recipientEmail} (manual email ${actualEmailIndex + 1})`);
+        
+        // Update analytics
+        campaign.analytics.timeDelayTriggersScheduled = (campaign.analytics.timeDelayTriggersScheduled || 0) + 1;
+        await campaign.save();
+        console.log(`📊 Time delay trigger analytics updated for ${recipientEmail}`);
+      } else {
+        console.log(`⏭️ Time delay trigger not scheduled for ${recipientEmail}:`);
+        console.log(`   - Enabled: ${campaign.timeDelayTrigger?.enabled}`);
+        console.log(`   - Has follow-up email: ${!!campaign.timeDelayTrigger?.followUpEmail}`);
       }
 
       // Schedule idle time trigger if enabled and email contains links
@@ -726,18 +466,29 @@ class EmailCampaignEngine {
         t.behavior === 'idle' && t.enabled && t.idleTime?.enabled
       );
       
-      if (idleTriggers.length > 0 && manualEmail.hasLinks) {
+      // Check if this is a purchase campaign email
+      const isPurchaseCampaign = campaign.purchaseCampaignType && campaign.purchaseCampaignType !== 'none';
+      
+      if (idleTriggers.length > 0 && (manualEmail.hasLinks || isPurchaseCampaign)) {
         const idleTrigger = idleTriggers[0];
         const idleTimeMs = idleTrigger.idleTime.minutes * 60 * 1000;
         
         await queueManager.scheduleIdleTimeTrigger(
           campaignId,
           recipientEmail,
-          manualEmailIndex,
+          actualEmailIndex,
           idleTimeMs
         );
         
-        console.log(`⏰ Scheduled idle time trigger for ${recipientEmail} (manual email ${manualEmailIndex + 1}) in ${idleTimeMs}ms`);
+        console.log(`✅ Idle trigger scheduled for ${recipientEmail} (manual email ${actualEmailIndex + 1}) in ${idleTimeMs}ms`);
+        console.log(`🔍 Idle trigger scheduled because: hasLinks=${manualEmail.hasLinks}, isPurchaseCampaign=${isPurchaseCampaign}`);
+        
+        // Update analytics
+        campaign.analytics.idleTriggersScheduled = (campaign.analytics.idleTriggersScheduled || 0) + 1;
+        await campaign.save();
+        console.log(`📊 Idle trigger analytics updated for ${recipientEmail}`);
+      } else if (idleTriggers.length > 0) {
+        console.log(`⏭️ Idle trigger not scheduled for ${recipientEmail}: hasLinks=${manualEmail.hasLinks}, isPurchaseCampaign=${isPurchaseCampaign}`);
       }
       
     } catch (error) {
@@ -806,52 +557,43 @@ class EmailCampaignEngine {
           
           recipient.manualEmails.push({
             sentAt: new Date(),
+            hasLinks: hasLinks,
             timeDelayEmailSent: false,
             idleEmailSent: false,
-            hasLinks: hasLinks,
             openFollowUpSent: false,
             clickFollowUpSent: false,
             opened: false,
-            clicked: false
+            clicked: false,
+            purchasePageVisited: false
           });
           
-          console.log(`📧 Added manual email entry for ${email} at ${recipient.manualEmails[recipient.manualEmails.length - 1].sentAt.toLocaleTimeString()}`);
-          if (hasLinks) {
-            console.log(`📧 Email contains links - email has passed through Email Template`);
-            console.log(`📧 Idle time checking will now be enabled for ${email} (manual email ${recipient.manualEmails.length})`);
-          } else {
-            console.log(`📧 Email does not contain links - idle time checking will only be enabled after Time Delay Trigger (if configured)`);
-          }
-          
           sentCount++;
-          console.log(`✅ Manual email sent successfully to ${email}`);
+          console.log(`✅ Manual email sent to ${email}`);
           
         } catch (error) {
           console.error(`❌ Failed to send manual email to ${email}:`, error);
-          // Continue with other recipients even if one fails
         }
       }
 
-      // Update analytics and save campaign immediately after all recipients are processed
-      campaign.analytics.totalSent += sentCount;
+      // Save campaign with updated recipients
       await campaign.save();
-      console.log(`💾 Campaign saved with updated recipient data`);
-
-      // Schedule triggers after saving the campaign
+      
+      // Schedule triggers for each sent email
       for (const email of recipientEmails) {
-        const recipient = campaign.recipients.find(r => r.email === email && r.status === 'active');
+        const recipient = campaign.recipients.find(r => r.email === email);
         if (recipient && recipient.manualEmails && recipient.manualEmails.length > 0) {
+          const manualEmailIndex = recipient.manualEmails.length - 1;
           try {
-            await this.scheduleTriggersForManualEmail(campaign._id, email, recipient.manualEmails.length - 1);
+            await this.scheduleTriggersForManualEmail(campaignId, email, manualEmailIndex);
           } catch (error) {
-            console.error(`❌ Error scheduling triggers for ${email}:`, error);
-            // Don't fail the entire operation for trigger scheduling errors
+            console.error(`❌ Failed to schedule triggers for ${email}:`, error);
           }
         }
       }
-
-      console.log(`📧 Manual email send completed. Sent to ${sentCount} recipients`);
-      return { sent: sentCount };
+      
+      console.log(`✅ Manual email sent to ${sentCount} recipients for campaign: ${campaign.name}`);
+      return { success: true, sentCount };
+      
     } catch (error) {
       console.error('❌ Error sending manual email to specific recipients:', error);
       throw error;

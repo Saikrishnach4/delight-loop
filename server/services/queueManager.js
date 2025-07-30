@@ -1,7 +1,14 @@
 const { Queue, Worker } = require('bullmq');
 const { redis } = require('../config/redis');
-const workerService = require('./workerService');
 const EmailCampaign = require('../models/EmailCampaign');
+
+// Import workerService dynamically to avoid circular dependency
+let workerService;
+try {
+  workerService = require('./workerService');
+} catch (error) {
+  console.error('❌ Failed to import workerService:', error.message);
+}
 
 // Queue names
 const QUEUE_NAMES = {
@@ -73,10 +80,13 @@ const timeDelayWorker = new Worker(QUEUE_NAMES.TIME_DELAY_TRIGGER, async (job) =
   const { campaignId, recipientEmail, manualEmailIndex } = job.data;
   
   try {
+    // Import workerService dynamically to ensure it's available
+    const workerService = require('./workerService');
     await workerService.processTimeDelayTrigger(campaignId, recipientEmail, manualEmailIndex);
     console.log(`✅ Time delay trigger job ${job.id} completed successfully`);
   } catch (error) {
     console.error(`❌ Time delay trigger job ${job.id} failed:`, error);
+    console.error(`❌ Error details:`, error.stack);
     throw error;
   }
 }, {
@@ -89,10 +99,13 @@ const idleTimeWorker = new Worker(QUEUE_NAMES.IDLE_TIME_TRIGGER, async (job) => 
   const { campaignId, recipientEmail, manualEmailIndex } = job.data;
   
   try {
+    // Import workerService dynamically to ensure it's available
+    const workerService = require('./workerService');
     await workerService.processIdleTimeTrigger(campaignId, recipientEmail, manualEmailIndex);
     console.log(`✅ Idle time trigger job ${job.id} completed successfully`);
   } catch (error) {
     console.error(`❌ Idle time trigger job ${job.id} failed:`, error);
+    console.error(`❌ Error details:`, error.stack);
     throw error;
   }
 }, {
@@ -111,10 +124,13 @@ const emailSendWorker = new Worker(QUEUE_NAMES.EMAIL_SEND, async (job) => {
       throw new Error(`Campaign ${campaignId} not found`);
     }
     
+    // Import workerService dynamically to ensure it's available
+    const workerService = require('./workerService');
     await workerService.sendSingleEmail(campaign, recipientEmail, emailTemplate);
     console.log(`✅ Email send job ${job.id} completed successfully`);
   } catch (error) {
     console.error(`❌ Email send job ${job.id} failed:`, error);
+    console.error(`❌ Error details:`, error.stack);
     throw error;
   }
 }, {
@@ -127,10 +143,13 @@ const behaviorTriggerWorker = new Worker(QUEUE_NAMES.BEHAVIOR_TRIGGER, async (jo
   const { campaignId, userEmail, behavior } = job.data;
   
   try {
+    // Import workerService dynamically to ensure it's available
+    const workerService = require('./workerService');
     await workerService.handleUserBehavior(campaignId, userEmail, behavior);
     console.log(`✅ Behavior trigger job ${job.id} completed successfully`);
   } catch (error) {
     console.error(`❌ Behavior trigger job ${job.id} failed:`, error);
+    console.error(`❌ Error details:`, error.stack);
     throw error;
   }
 }, {
@@ -140,40 +159,114 @@ const behaviorTriggerWorker = new Worker(QUEUE_NAMES.BEHAVIOR_TRIGGER, async (jo
 
 // Worker event handlers
 timeDelayWorker.on('completed', (job) => {
-  console.log(`✅ Time delay worker completed job ${job.id}`);
+  console.log(`✅ Time delay worker completed job ${job.id} for ${job.data.recipientEmail}`);
 });
 
 timeDelayWorker.on('failed', (job, err) => {
-  console.error(`❌ Time delay worker failed job ${job.id}:`, err);
+  console.error(`❌ Time delay worker failed job ${job.id} for ${job.data.recipientEmail}:`, err);
+});
+
+timeDelayWorker.on('active', (job) => {
+  console.log(`🔄 Time delay worker started processing job ${job.id} for ${job.data.recipientEmail}`);
 });
 
 idleTimeWorker.on('completed', (job) => {
-  console.log(`✅ Idle time worker completed job ${job.id}`);
+  console.log(`✅ Idle time worker completed job ${job.id} for ${job.data.recipientEmail}`);
 });
 
 idleTimeWorker.on('failed', (job, err) => {
-  console.error(`❌ Idle time worker failed job ${job.id}:`, err);
+  console.error(`❌ Idle time worker failed job ${job.id} for ${job.data.recipientEmail}:`, err);
+});
+
+idleTimeWorker.on('active', (job) => {
+  console.log(`🔄 Idle time worker started processing job ${job.id} for ${job.data.recipientEmail}`);
 });
 
 emailSendWorker.on('completed', (job) => {
-  console.log(`✅ Email send worker completed job ${job.id}`);
+  console.log(`✅ Email send worker completed job ${job.id} for ${job.data.recipientEmail}`);
 });
 
 emailSendWorker.on('failed', (job, err) => {
-  console.error(`❌ Email send worker failed job ${job.id}:`, err);
+  console.error(`❌ Email send worker failed job ${job.id} for ${job.data.recipientEmail}:`, err);
+});
+
+emailSendWorker.on('active', (job) => {
+  console.log(`🔄 Email send worker started processing job ${job.id} for ${job.data.recipientEmail}`);
 });
 
 behaviorTriggerWorker.on('completed', (job) => {
-  console.log(`✅ Behavior trigger worker completed job ${job.id}`);
+  console.log(`✅ Behavior trigger worker completed job ${job.id} for ${job.data.userEmail}`);
 });
 
 behaviorTriggerWorker.on('failed', (job, err) => {
-  console.error(`❌ Behavior trigger worker failed job ${job.id}:`, err);
+  console.error(`❌ Behavior trigger worker failed job ${job.id} for ${job.data.userEmail}:`, err);
 });
+
+behaviorTriggerWorker.on('active', (job) => {
+  console.log(`🔄 Behavior trigger worker started processing job ${job.id} for ${job.data.userEmail}`);
+});
+
+// Initialize workers and log their status
+const initializeWorkers = () => {
+  console.log('🔧 Initializing BullMQ workers...');
+  console.log(`⏰ Time delay worker: ${timeDelayWorker.name} (concurrency: ${timeDelayWorker.concurrency})`);
+  console.log(`⏰ Idle time worker: ${idleTimeWorker.name} (concurrency: ${idleTimeWorker.concurrency})`);
+  console.log(`📧 Email send worker: ${emailSendWorker.name} (concurrency: ${emailSendWorker.concurrency})`);
+  console.log(`🎯 Behavior trigger worker: ${behaviorTriggerWorker.name} (concurrency: ${behaviorTriggerWorker.concurrency})`);
+
+  // Check worker status
+  console.log(`🔍 Time delay worker is running: ${timeDelayWorker.isRunning()}`);
+  console.log(`🔍 Idle time worker is running: ${idleTimeWorker.isRunning()}`);
+  console.log(`🔍 Email send worker is running: ${emailSendWorker.isRunning()}`);
+  console.log(`🔍 Behavior trigger worker is running: ${behaviorTriggerWorker.isRunning()}`);
+
+  // Test if workers can process jobs
+  console.log('🧪 Testing worker initialization...');
+  
+  // Check if Redis is connected
+  if (redis.status === 'ready') {
+    console.log('✅ Redis is ready');
+  } else {
+    console.log(`⚠️ Redis status: ${redis.status}`);
+  }
+
+  // Test job scheduling to verify workers are working
+  console.log('🧪 Testing worker functionality with a test job...');
+  
+  // Get a real active campaign ID for testing
+  EmailCampaign.findOne({ status: 'active' }).then(campaign => {
+    if (campaign && campaign.recipients && campaign.recipients.length > 0) {
+      const testRecipient = campaign.recipients[0].email;
+      scheduleIdleTimeTrigger(campaign._id.toString(), testRecipient, 0, 5000)
+        .then(() => {
+          console.log('✅ Test idle job scheduled successfully');
+          console.log('✅ Workers are ready to process jobs');
+        })
+        .catch((error) => {
+          console.error('❌ Test job scheduling failed:', error.message);
+          console.error('❌ Workers may not be working properly');
+        });
+    } else {
+      console.log('⚠️ No campaigns found for worker testing');
+    }
+  }).catch(error => {
+    console.error('❌ Error finding campaign for worker test:', error.message);
+  });
+
+  console.log('✅ All workers initialized and ready to process jobs');
+};
+
+// Initialize workers with delay to ensure Redis is fully connected
+setTimeout(() => {
+  console.log('🔄 Delayed worker initialization to ensure Redis is ready...');
+  initializeWorkers();
+}, 2000);
 
 // Queue management functions
 const scheduleTimeDelayTrigger = async (campaignId, recipientEmail, manualEmailIndex, delayMs) => {
   try {
+    console.log(`⏰ Attempting to schedule time delay trigger for ${recipientEmail} in ${delayMs}ms`);
+    
     const job = await timeDelayQueue.add(
       'time-delay-trigger',
       { campaignId, recipientEmail, manualEmailIndex },
@@ -183,9 +276,19 @@ const scheduleTimeDelayTrigger = async (campaignId, recipientEmail, manualEmailI
         removeOnComplete: true
       }
     );
-    console.log(`⏰ Scheduled time delay trigger job ${job.id} for ${delayMs}ms from now`);
+    
+    console.log(`✅ Scheduled time delay trigger job ${job.id} for ${recipientEmail} in ${delayMs}ms`);
+    console.log(`📅 Job will execute at: ${new Date(Date.now() + delayMs).toISOString()}`);
+    
+    // Verify job was added to queue
+    const waitingJobs = await timeDelayQueue.getWaiting();
+    console.log(`📊 Time delay queue now has ${waitingJobs.length} waiting jobs`);
+    
     return job;
   } catch (error) {
+    console.error('❌ Failed to schedule time delay trigger:', error.message);
+    console.error('❌ Error details:', error.stack);
+    
     if (error.message.includes('Command timed out')) {
       console.warn('⚠️ Redis timeout while scheduling time delay trigger - retrying...');
       // Wait a bit and retry once
@@ -200,14 +303,13 @@ const scheduleTimeDelayTrigger = async (campaignId, recipientEmail, manualEmailI
             removeOnComplete: true
           }
         );
-        console.log(`⏰ Scheduled time delay trigger job ${job.id} (retry) for ${delayMs}ms from now`);
+        console.log(`✅ Scheduled time delay trigger job ${job.id} (retry) for ${recipientEmail} in ${delayMs}ms`);
         return job;
       } catch (retryError) {
         console.error('❌ Failed to schedule time delay trigger after retry:', retryError.message);
         throw retryError;
       }
     } else {
-      console.error('❌ Failed to schedule time delay trigger:', error.message);
       throw error;
     }
   }
@@ -215,6 +317,9 @@ const scheduleTimeDelayTrigger = async (campaignId, recipientEmail, manualEmailI
 
 const scheduleIdleTimeTrigger = async (campaignId, recipientEmail, manualEmailIndex, delayMs) => {
   try {
+    console.log(`⏰ Attempting to schedule idle time trigger for ${recipientEmail} in ${delayMs}ms`);
+    console.log(`🔍 Job details: campaignId=${campaignId}, manualEmailIndex=${manualEmailIndex}`);
+    
     const job = await idleTimeQueue.add(
       'idle-time-trigger',
       { campaignId, recipientEmail, manualEmailIndex },
@@ -224,9 +329,24 @@ const scheduleIdleTimeTrigger = async (campaignId, recipientEmail, manualEmailIn
         removeOnComplete: true
       }
     );
-    console.log(`⏰ Scheduled idle time trigger job ${job.id} for ${delayMs}ms from now`);
+    
+    console.log(`✅ Scheduled idle time trigger job ${job.id} for ${recipientEmail} in ${delayMs}ms`);
+    console.log(`📅 Job will execute at: ${new Date(Date.now() + delayMs).toISOString()}`);
+    console.log(`🕐 Current time: ${new Date().toISOString()}`);
+    
+    // Verify job was added to queue
+    const waitingJobs = await idleTimeQueue.getWaiting();
+    console.log(`📊 Idle time queue now has ${waitingJobs.length} waiting jobs`);
+    
+    // Check if worker is running
+    console.log(`🔍 Idle time worker is running: ${idleTimeWorker.isRunning()}`);
+    console.log(`🔍 Idle time worker status: ${idleTimeWorker.status}`);
+    
     return job;
   } catch (error) {
+    console.error('❌ Failed to schedule idle time trigger:', error.message);
+    console.error('❌ Error details:', error.stack);
+    
     if (error.message.includes('Command timed out')) {
       console.warn('⚠️ Redis timeout while scheduling idle time trigger - retrying...');
       // Wait a bit and retry once
@@ -241,14 +361,13 @@ const scheduleIdleTimeTrigger = async (campaignId, recipientEmail, manualEmailIn
             removeOnComplete: true
           }
         );
-        console.log(`⏰ Scheduled idle time trigger job ${job.id} (retry) for ${delayMs}ms from now`);
+        console.log(`✅ Scheduled idle time trigger job ${job.id} (retry) for ${recipientEmail} in ${delayMs}ms`);
         return job;
       } catch (retryError) {
         console.error('❌ Failed to schedule idle time trigger after retry:', retryError.message);
         throw retryError;
       }
     } else {
-      console.error('❌ Failed to schedule idle time trigger:', error.message);
       throw error;
     }
   }

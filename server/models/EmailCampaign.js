@@ -91,7 +91,12 @@ const emailCampaignSchema = new mongoose.Schema({
     totalClicks: { type: Number, default: 0 },
     totalPurchases: { type: Number, default: 0 },
     totalRevenue: { type: Number, default: 0 },
-    totalAbandonments: { type: Number, default: 0 }
+    totalAbandonments: { type: Number, default: 0 },
+    // Trigger scheduling analytics
+    timeDelayTriggersScheduled: { type: Number, default: 0 },
+    idleTriggersScheduled: { type: Number, default: 0 },
+    timeDelayEmailsSent: { type: Number, default: 0 },
+    idleEmailsSent: { type: Number, default: 0 }
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

@@ -10,20 +10,41 @@ class WorkerService {
   async processTimeDelayTrigger(campaignId, recipientEmail, manualEmailIndex) {
     try {
       console.log(`⏰ Processing time delay trigger for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
+      console.log(`🔍 Campaign ID: ${campaignId}, Recipient: ${recipientEmail}, Email Index: ${manualEmailIndex}`);
+      console.log(`🕐 Time delay trigger processing started at: ${new Date().toISOString()}`);
+      
+      // Validate campaignId format
+      if (!campaignId || campaignId === 'test-campaign-id') {
+        console.log(`⏭️ Skipping test campaign: ${campaignId}`);
+        return;
+      }
+      
+      // Validate ObjectId format
+      const mongoose = require('mongoose');
+      if (!mongoose.Types.ObjectId.isValid(campaignId)) {
+        console.error(`❌ Invalid campaign ID format: ${campaignId}`);
+        throw new Error(`Invalid campaign ID format: ${campaignId}`);
+      }
       
       const campaign = await EmailCampaign.findById(campaignId);
-      if (!campaign || campaign.status !== 'active') {
-        throw new Error('Campaign not found or not active');
+      if (!campaign) {
+        throw new Error(`Campaign ${campaignId} not found`);
+      }
+      if (campaign.status !== 'active') {
+        throw new Error(`Campaign ${campaignId} is not active (status: ${campaign.status})`);
       }
 
       const recipient = campaign.recipients.find(r => r.email === recipientEmail);
-      if (!recipient || recipient.status !== 'active') {
-        throw new Error('Recipient not found or not active');
+      if (!recipient) {
+        throw new Error(`Recipient ${recipientEmail} not found in campaign ${campaignId}`);
+      }
+      if (recipient.status !== 'active') {
+        throw new Error(`Recipient ${recipientEmail} is not active (status: ${recipient.status})`);
       }
 
       const manualEmail = recipient.manualEmails[manualEmailIndex];
       if (!manualEmail) {
-        throw new Error('Manual email not found');
+        throw new Error(`Manual email at index ${manualEmailIndex} not found for ${recipientEmail}`);
       }
 
       if (manualEmail.timeDelayEmailSent) {
@@ -31,6 +52,18 @@ class WorkerService {
         return;
       }
 
+      // Check if time delay trigger is properly configured
+      if (!campaign.timeDelayTrigger?.enabled) {
+        throw new Error('Time delay trigger is not enabled');
+      }
+      if (!campaign.timeDelayTrigger?.followUpEmail) {
+        throw new Error('Time delay trigger follow-up email is not configured');
+      }
+
+      console.log(`📧 Sending time delay follow-up email to ${recipientEmail}`);
+      console.log(`📧 Subject: ${campaign.timeDelayTrigger.followUpEmail.subject}`);
+      console.log(`📧 Follow-up email body length: ${campaign.timeDelayTrigger.followUpEmail.body?.length || 0} characters`);
+      
       // Send time delay follow-up email
       await this.sendSingleEmail(campaign, recipientEmail, campaign.timeDelayTrigger.followUpEmail);
       
@@ -40,9 +73,11 @@ class WorkerService {
       
       // Update analytics
       campaign.analytics.totalSent += 1;
+      campaign.analytics.timeDelayEmailsSent = (campaign.analytics.timeDelayEmailsSent || 0) + 1;
       await campaign.save();
       
       console.log(`✅ Time delay follow-up email sent to ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
+      console.log(`📊 Time delay email analytics updated for ${recipientEmail}`);
       
       // Schedule idle time trigger if campaign has idle triggers
       const idleTriggers = campaign.behaviorTriggers.filter(t => 
@@ -63,10 +98,13 @@ class WorkerService {
         );
         
         console.log(`⏰ Scheduled idle time trigger for ${recipientEmail} (manual email ${manualEmailIndex + 1}) in ${idleTrigger.idleTime.minutes} minutes`);
+      } else {
+        console.log(`⏭️ No idle triggers configured for campaign ${campaign.name}`);
       }
       
     } catch (error) {
       console.error(`❌ Error processing time delay trigger for ${recipientEmail}:`, error);
+      console.error(`❌ Error details:`, error.stack);
       throw error;
     }
   }
@@ -75,20 +113,40 @@ class WorkerService {
   async processIdleTimeTrigger(campaignId, recipientEmail, manualEmailIndex) {
     try {
       console.log(`⏰ Processing idle time trigger for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
+      console.log(`🔍 Campaign ID: ${campaignId}, Recipient: ${recipientEmail}, Email Index: ${manualEmailIndex}`);
+      
+      // Validate campaignId format
+      if (!campaignId || campaignId === 'test-campaign-id') {
+        console.log(`⏭️ Skipping test campaign: ${campaignId}`);
+        return;
+      }
+      
+      // Validate ObjectId format
+      const mongoose = require('mongoose');
+      if (!mongoose.Types.ObjectId.isValid(campaignId)) {
+        console.error(`❌ Invalid campaign ID format: ${campaignId}`);
+        throw new Error(`Invalid campaign ID format: ${campaignId}`);
+      }
       
       const campaign = await EmailCampaign.findById(campaignId);
-      if (!campaign || campaign.status !== 'active') {
-        throw new Error('Campaign not found or not active');
+      if (!campaign) {
+        throw new Error(`Campaign ${campaignId} not found`);
+      }
+      if (campaign.status !== 'active') {
+        throw new Error(`Campaign ${campaignId} is not active (status: ${campaign.status})`);
       }
 
       const recipient = campaign.recipients.find(r => r.email === recipientEmail);
-      if (!recipient || recipient.status !== 'active') {
-        throw new Error('Recipient not found or not active');
+      if (!recipient) {
+        throw new Error(`Recipient ${recipientEmail} not found in campaign ${campaignId}`);
+      }
+      if (recipient.status !== 'active') {
+        throw new Error(`Recipient ${recipientEmail} is not active (status: ${recipient.status})`);
       }
 
       const manualEmail = recipient.manualEmails[manualEmailIndex];
       if (!manualEmail) {
-        throw new Error('Manual email not found');
+        throw new Error(`Manual email at index ${manualEmailIndex} not found for ${recipientEmail}`);
       }
 
       // Check if idle email already sent
@@ -98,31 +156,57 @@ class WorkerService {
       }
 
       // Check if user has already interacted
-      if (manualEmail.openFollowUpSent || manualEmail.clickFollowUpSent) {
-        console.log(`⏭️ User already interacted for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
-        return;
+      // For purchase campaigns, check if they opened the email (pixel tracking) or clicked the purchase button
+      const isPurchaseCampaign = campaign.purchaseCampaignType && campaign.purchaseCampaignType !== 'none';
+      
+      if (isPurchaseCampaign) {
+        // For purchase campaigns, check if user visited the purchase page (pixel tracking only)
+        if (manualEmail.purchasePageVisited) {
+          console.log(`⏭️ User already visited purchase page for ${recipientEmail} (purchase page visited: ${manualEmail.purchasePageVisited})`);
+          return;
+        }
+      } else {
+        // For regular campaigns, check if user opened/clicked the email
+        if (manualEmail.openFollowUpSent || manualEmail.clickFollowUpSent) {
+          console.log(`⏭️ User already interacted for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
+          return;
+        }
       }
 
-      // Check if any email contains links (original or time delay follow-up)
-      const originalEmailHasLinks = manualEmail.hasLinks;
-      const timeDelayEmailSent = manualEmail.timeDelayEmailSent;
-      const timeDelayFollowUpHasLinks = campaign.timeDelayTrigger?.enabled && 
-                                       campaign.timeDelayTrigger?.followUpEmail?.body && 
-                                       (campaign.timeDelayTrigger.followUpEmail.body.includes('<a href=') || 
-                                        campaign.timeDelayTrigger.followUpEmail.body.includes('http://') || 
-                                        campaign.timeDelayTrigger.followUpEmail.body.includes('https://'));
-      
-      const anyEmailHasLinks = originalEmailHasLinks || (timeDelayEmailSent && timeDelayFollowUpHasLinks);
-      
-      // For purchase campaigns, always consider emails as having links (they have purchase buttons)
-      const isPurchaseEmail = campaign.purchaseCampaignType && campaign.purchaseCampaignType !== 'none';
-      
-      if (!anyEmailHasLinks && !isPurchaseEmail) {
-        console.log(`⏭️ No emails contain links for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
-        return;
+      // For purchase campaigns, always allow idle trigger if user hasn't visited the purchase page
+      if (isPurchaseCampaign) {
+        console.log(`🔍 Purchase campaign idle trigger check for ${recipientEmail}:`);
+        console.log(`  - User visited purchase page (pixel tracking): ${manualEmail.purchasePageVisited}`);
+        console.log(`  - Idle trigger should fire: ${!manualEmail.purchasePageVisited}`);
+        
+        // For purchase campaigns, idle trigger should fire if user hasn't visited the purchase page
+        if (manualEmail.purchasePageVisited) {
+          console.log(`⏭️ User already visited purchase page for ${recipientEmail}`);
+          return;
+        }
+      } else {
+        // For regular campaigns, check if any email contains links
+        const originalEmailHasLinks = manualEmail.hasLinks;
+        const timeDelayEmailSent = manualEmail.timeDelayEmailSent;
+        const timeDelayFollowUpHasLinks = campaign.timeDelayTrigger?.enabled && 
+                                         campaign.timeDelayTrigger?.followUpEmail?.body && 
+                                         (campaign.timeDelayTrigger.followUpEmail.body.includes('<a href=') || 
+                                          campaign.timeDelayTrigger.followUpEmail.body.includes('http://') || 
+                                          campaign.timeDelayTrigger.followUpEmail.body.includes('https://'));
+        
+        const anyEmailHasLinks = originalEmailHasLinks || (timeDelayEmailSent && timeDelayFollowUpHasLinks);
+        
+        console.log(`🔍 Regular campaign idle trigger check for ${recipientEmail}:`);
+        console.log(`  - Original email has links: ${originalEmailHasLinks}`);
+        console.log(`  - Time delay email sent: ${timeDelayEmailSent}`);
+        console.log(`  - Time delay follow-up has links: ${timeDelayFollowUpHasLinks}`);
+        console.log(`  - Any email has links: ${anyEmailHasLinks}`);
+        
+        if (!anyEmailHasLinks) {
+          console.log(`⏭️ No emails contain links for ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
+          return;
+        }
       }
-
-      console.log(`🔍 Idle trigger check for ${recipientEmail}: hasLinks=${anyEmailHasLinks}, isPurchaseEmail=${isPurchaseEmail}`);
 
       // Find idle trigger
       const idleTriggers = campaign.behaviorTriggers.filter(t => 
@@ -135,6 +219,8 @@ class WorkerService {
       }
 
       const idleTrigger = idleTriggers[0];
+      console.log(`📧 Sending idle reminder email to ${recipientEmail}`);
+      console.log(`📧 Subject: ${idleTrigger.followUpEmail.subject}`);
       
       // Send idle reminder email
       await this.sendSingleEmail(campaign, recipientEmail, idleTrigger.followUpEmail);
@@ -144,12 +230,15 @@ class WorkerService {
       
       // Update analytics
       campaign.analytics.totalSent += 1;
+      campaign.analytics.idleEmailsSent = (campaign.analytics.idleEmailsSent || 0) + 1;
       await campaign.save();
       
       console.log(`✅ Idle reminder email sent to ${recipientEmail} (manual email ${manualEmailIndex + 1})`);
+      console.log(`📊 Idle email analytics updated for ${recipientEmail}`);
       
     } catch (error) {
       console.error(`❌ Error processing idle time trigger for ${recipientEmail}:`, error);
+      console.error(`❌ Error details:`, error.stack);
       throw error;
     }
   }
@@ -220,13 +309,14 @@ class WorkerService {
       } else if (behavior === 'purchase') {
         latestManualEmail.purchased = true;
         latestManualEmail.purchasedAt = new Date();
-        // Extract purchase amount from job data if available
-        if (job && job.data && job.data.purchaseAmount) {
-          latestManualEmail.purchaseAmount = job.data.purchaseAmount;
-          latestManualEmail.purchaseCurrency = job.data.purchaseCurrency || 'USD';
-        }
+        // Note: Purchase amount and currency are handled in the main emailCampaignEngine
+        // This worker version doesn't have access to additional data
         campaign.analytics.totalPurchases += 1;
         campaign.analytics.totalRevenue += (latestManualEmail.purchaseAmount || 0);
+      } else if (behavior === 'purchasePageVisit') {
+        latestManualEmail.purchasePageVisited = true;
+        latestManualEmail.purchasePageVisitedAt = new Date();
+        console.log(`📧 Marked latest email as purchase page visited for ${userEmail}`);
       }
 
       // Check for behavior triggers

@@ -24,10 +24,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Checkbox
 } from '@mui/material';
 import {
@@ -53,13 +49,12 @@ const EmailCampaignBuilder = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [newRecipient, setNewRecipient] = useState({ email: '', name: '' });
-  const [sendToSpecificOpen, setSendToSpecificOpen] = useState(false);
-  const [selectedRecipients, setSelectedRecipients] = useState([]);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     if (id === 'new') {
       setCampaign({
-        name: 'New Campaign',
+        name: 'New Purchase Campaign',
         description: '',
         status: 'draft',
         emailTemplate: {
@@ -84,6 +79,19 @@ const EmailCampaignBuilder = () => {
       fetchCampaign();
     }
   }, [id, user]);
+
+  // Add keyboard shortcut to mark changes (Ctrl+S)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        markAsChanged();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchCampaign = async () => {
     try {
@@ -142,6 +150,9 @@ const EmailCampaignBuilder = () => {
       } else {
         setCampaign(savedCampaign);
       }
+      
+      // Reset unsaved changes flag
+      setHasUnsavedChanges(false);
     } catch (error) {
       setError(error.message);
     } finally {
@@ -170,58 +181,7 @@ const EmailCampaignBuilder = () => {
     }
   };
 
-  const handleSendEmail = async () => {
-    try {
-      const response = await fetch(`/api/campaigns/${id}/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ recipientEmails: [] }) // Send to all recipients
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send email');
-      }
-
-      const result = await response.json();
-      alert(`Email sent to ${result.sent} recipients`);
-      fetchCampaign(); // Refresh campaign data
-    } catch (error) {
-      setError(error.message);
-    }
-  };
-
-  const handleSendToSpecificRecipients = async () => {
-    try {
-      if (selectedRecipients.length === 0) {
-        alert('Please select at least one recipient');
-        return;
-      }
-
-      const response = await fetch(`/api/campaigns/${id}/send-to-recipients`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ recipientEmails: selectedRecipients })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send email to specific recipients');
-      }
-
-      const result = await response.json();
-      alert(`Email sent to ${result.sent} recipients`);
-      setSendToSpecificOpen(false);
-      setSelectedRecipients([]);
-      fetchCampaign(); // Refresh campaign data
-    } catch (error) {
-      setError(error.message);
-    }
-  };
+  // Manual email sending removed - focus on purchase campaigns only
 
   const handleAddRecipient = async () => {
     if (!newRecipient.email.trim()) return;
@@ -273,6 +233,17 @@ const EmailCampaignBuilder = () => {
 
 
 
+
+  // Function to mark that there are unsaved changes
+  const markAsChanged = () => {
+    setHasUnsavedChanges(true);
+  };
+
+  // Helper function to update campaign and mark as changed
+  const updateCampaign = (updates) => {
+    setCampaign({ ...campaign, ...updates });
+    setHasUnsavedChanges(true);
+  };
 
   const handleSendPurchaseCampaign = async () => {
     try {
@@ -335,7 +306,20 @@ const EmailCampaignBuilder = () => {
         throw new Error(result.error || 'Failed to send purchase campaign');
       }
 
-      alert(`✅ Purchase campaign sent successfully!\n\nSent to: ${result.sentCount} recipients\nFailed: ${result.failedEmails.length} recipients\n\n${result.message}`);
+      let message = `✅ Purchase campaign sent successfully!\n\nSent to: ${result.sentCount} recipients\nFailed: ${result.failedEmails.length} recipients\n\n${result.message}`;
+      
+      if (result.triggersScheduled) {
+        message += `\n\n⏰ Triggers Scheduled:`;
+        if (result.triggersScheduled.idleTriggers > 0) {
+          message += `\n• Idle triggers: ${result.triggersScheduled.idleTriggers} (${result.triggersScheduled.idleTimeMinutes} minutes)`;
+        }
+        if (result.triggersScheduled.timeDelayTriggers > 0) {
+          message += `\n• Time delay triggers: ${result.triggersScheduled.timeDelayTriggers}`;
+        }
+        message += `\n\n💡 Users will receive idle reminders if they don't open/click within the configured time!`;
+      }
+      
+      alert(message);
       
       // Refresh campaign data
       await fetchCampaign();
@@ -374,7 +358,7 @@ const EmailCampaignBuilder = () => {
             <ArrowBackIcon />
           </IconButton>
           <Typography variant="h4" component="h1">
-            {id === 'new' ? 'Create Campaign' : 'Edit Campaign'}
+            {id === 'new' ? 'Create Purchase Campaign' : 'Edit Purchase Campaign'}
           </Typography>
         </Box>
         
@@ -453,7 +437,7 @@ const EmailCampaignBuilder = () => {
                 fullWidth
                 label="Campaign Name"
                 value={campaign.name}
-                onChange={(e) => setCampaign({ ...campaign, name: e.target.value })}
+                onChange={(e) => updateCampaign({ name: e.target.value })}
                 sx={{ mb: 2 }}
               />
               
@@ -463,19 +447,23 @@ const EmailCampaignBuilder = () => {
                 rows={3}
                 label="Description"
                 value={campaign.description}
-                onChange={(e) => setCampaign({ ...campaign, description: e.target.value })}
+                onChange={(e) => updateCampaign({ description: e.target.value })}
                 sx={{ mb: 2 }}
               />
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Email Template */}
+        {/* Purchase Email Template */}
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Email Template
+                📧 Purchase Email Template
+              </Typography>
+              
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                This template will be used for purchase campaign emails. The purchase button will be automatically added.
               </Typography>
               
 
@@ -637,16 +625,16 @@ const EmailCampaignBuilder = () => {
           </Card>
         </Grid>
 
-        {/* Behavior Triggers */}
+        {/* Behavior Triggers for Purchase Campaigns */}
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Behavior Triggers
+                ⚡ Behavior Triggers for Purchase Campaigns
               </Typography>
               
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Send follow-up emails when users interact with your emails
+                Configure automatic follow-up emails based on user behavior with purchase campaigns. Idle triggers are especially useful for purchase campaigns.
               </Typography>
               
               {['open', 'click', 'idle', 'purchase', 'abandonment'].map(behavior => {
@@ -909,12 +897,12 @@ const EmailCampaignBuilder = () => {
           </Card>
         </Grid>
 
-        {/* Recipients */}
+        {/* Recipients for Purchase Campaigns */}
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Recipients ({campaign.recipients?.length || 0})
+                👥 Recipients for Purchase Campaigns ({campaign.recipients?.length || 0})
               </Typography>
               
               {/* Recipient Summary */}
@@ -936,7 +924,7 @@ const EmailCampaignBuilder = () => {
               </Box>
               
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Add email addresses manually to send emails to specific recipients
+                Add recipients who will receive purchase campaign emails. You can then select specific recipients or use filters in the purchase campaign settings.
               </Typography>
               
               <Box display="flex" gap={1} mb={2}>
@@ -1237,17 +1225,6 @@ const EmailCampaignBuilder = () => {
                     {campaign.purchaseCampaignType !== 'none' && (
                       <>
                         <Button
-                          variant="contained"
-                          color="success"
-                          fullWidth
-                          sx={{ mt: 2 }}
-                          onClick={handleSendPurchaseCampaign}
-                          disabled={saving}
-                        >
-                          {saving ? <CircularProgress size={20} /> : '🛒 Send Purchase Campaign'}
-                        </Button>
-                        
-                        <Button
                           variant="outlined"
                           size="small"
                           fullWidth
@@ -1271,35 +1248,7 @@ const EmailCampaignBuilder = () => {
                           🔍 Debug Purchase Settings
                         </Button>
                         
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          fullWidth
-                          sx={{ mt: 1 }}
-                          onClick={async () => {
-                            try {
-                              const userEmail = prompt('Enter user email to test idle trigger:');
-                              if (!userEmail) return;
-                              
-                              const response = await fetch(`/api/campaigns/${id}/test-idle-trigger`, {
-                                method: 'POST',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                },
-                                body: JSON.stringify({ userEmail })
-                              });
-                              const result = await response.json();
-                              console.log('⏰ Idle Trigger Test:', result);
-                              alert(`Idle Trigger Test:\n${result.message}`);
-                            } catch (error) {
-                              console.error('Idle trigger test error:', error);
-                              alert('Idle trigger test failed: ' + error.message);
-                            }
-                          }}
-                        >
-                          ⏰ Test Idle Trigger
-                        </Button>
+
                       </>
                     )}
                   </Box>
@@ -1311,41 +1260,60 @@ const EmailCampaignBuilder = () => {
 
 
 
-        {/* Actions */}
+        {/* Purchase Campaign Actions */}
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Actions
+                🛒 Purchase Campaign Actions
+              </Typography>
+              
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Configure your purchase campaign settings above, then send purchase emails to your selected recipients.
               </Typography>
               
               <Box display="flex" gap={2} flexWrap="wrap">
+                {/* Save Campaign Button - Always visible */}
                 <Button
                   variant="contained"
-                  startIcon={<EmailIcon />}
-                  onClick={handleSendEmail}
-                  disabled={campaign.status !== 'active' || !campaign.recipients?.length}
+                  color="primary"
+                  onClick={handleSave}
+                  disabled={saving}
+                  sx={{ 
+                    backgroundColor: hasUnsavedChanges ? '#ff9800' : '#1976d2',
+                    '&:hover': {
+                      backgroundColor: hasUnsavedChanges ? '#f57c00' : '#1565c0'
+                    }
+                  }}
                 >
-                  Send Email to All
+                  {saving ? <CircularProgress size={20} /> : hasUnsavedChanges ? '💾 Save Campaign*' : '💾 Save Campaign'}
                 </Button>
-                
-                <Button
-                  variant="outlined"
-                  startIcon={<EmailIcon />}
-                  onClick={() => setSendToSpecificOpen(true)}
-                  disabled={campaign.status !== 'active' || !campaign.recipients?.length}
-                >
-                  Send to Specific Recipients
-                </Button>
-                
 
+                {campaign.purchaseCampaignType !== 'none' && (
+                  <>
+                    {hasUnsavedChanges && (
+                      <Alert severity="warning" sx={{ mb: 2, width: '100%' }}>
+                        ⚠️ You have unsaved changes. Please save the campaign first before sending emails.
+                      </Alert>
+                    )}
+                    <Button
+                      variant="contained"
+                      color="success"
+                      startIcon={<EmailIcon />}
+                      onClick={handleSendPurchaseCampaign}
+                      disabled={saving || campaign.status !== 'active' || hasUnsavedChanges}
+                    >
+                      {saving ? <CircularProgress size={20} /> : '🛒 Send Purchase Campaign'}
+                    </Button>
+                  </>
+                )}
                 
                 <Button
                   variant="outlined"
                   startIcon={<BarChartIcon />}
                   onClick={() => navigate(`/campaigns/${id}/analytics`)}
                 >
-                  Analytics
+                  View Analytics
                 </Button>
                 
                 <Button
@@ -1355,53 +1323,18 @@ const EmailCampaignBuilder = () => {
                   Back to Campaigns
                 </Button>
               </Box>
+              
+              {campaign.purchaseCampaignType === 'none' && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  Configure purchase campaign settings above to enable sending purchase emails.
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Send to Specific Recipients Dialog */}
-      <Dialog open={sendToSpecificOpen} onClose={() => setSendToSpecificOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Send Email to Specific Recipients</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select recipients to send the manual email to. This will not affect other recipients' follow-up emails.
-          </Typography>
-          
-          <Box maxHeight={300} overflow="auto">
-            {campaign?.recipients?.map((recipient, index) => (
-              <Box key={index} display="flex" alignItems="center" p={1} borderBottom="1px solid #eee">
-                <Checkbox
-                  checked={selectedRecipients.includes(recipient.email)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedRecipients([...selectedRecipients, recipient.email]);
-                    } else {
-                      setSelectedRecipients(selectedRecipients.filter(email => email !== recipient.email));
-                    }
-                  }}
-                />
-                <Box ml={1}>
-                  <Typography variant="body2">{recipient.email}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {recipient.name || 'No name'} • {recipient.status}
-                  </Typography>
-                </Box>
-              </Box>
-            ))}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSendToSpecificOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handleSendToSpecificRecipients} 
-            variant="contained"
-            disabled={selectedRecipients.length === 0}
-          >
-            Send to {selectedRecipients.length} Recipients
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Purchase campaign functionality is now the primary focus */}
     </Box>
   );
 };

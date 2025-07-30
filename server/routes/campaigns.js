@@ -353,18 +353,8 @@ router.post('/test-email', auth, async (req, res) => {
   }
 });
 
-// Manually check time delay triggers (for testing)
-router.post('/check-triggers', auth, async (req, res) => {
-  try {
-    console.log('🔍 Manual trigger check requested');
-    await emailCampaignEngine.checkTimeTriggers();
-    await emailCampaignEngine.checkIdleTimeTriggers();
-    res.json({ message: 'Time delay and idle time triggers checked successfully' });
-  } catch (error) {
-    console.error('Error checking triggers:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// Note: Old trigger checking methods removed - now using Redis/BullMQ queues
+// Triggers are automatically scheduled when emails are sent
 
 // Test endpoint to check campaign configuration
 router.get('/test-config/:campaignId', auth, async (req, res) => {
@@ -473,6 +463,39 @@ router.get('/track/open/:campaignId/:userEmail', async (req, res) => {
     // Still return the pixel even if there's an error
     res.set('Content-Type', 'image/png');
     res.send(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
+  }
+});
+
+// Track purchase page visits (for idle tracking)
+router.get('/track/purchase-page-visit/:campaignId/:userEmail', async (req, res) => {
+  try {
+    const { campaignId, userEmail } = req.params;
+    const decodedEmail = decodeURIComponent(userEmail);
+    
+    console.log(`🛒 Purchase page visit tracked via pixel: ${decodedEmail} in campaign ${campaignId}`);
+    
+    // Track purchase page visit as "purchasePageVisit" behavior
+    const result = await emailCampaignEngine.handleUserBehavior(campaignId, decodedEmail, 'purchasePageVisit');
+    
+    if (result.success) {
+      console.log(`✅ Purchase page visit tracked for ${decodedEmail}`);
+    }
+    
+    // Return a 1x1 transparent pixel
+    res.writeHead(200, {
+      'Content-Type': 'image/gif',
+      'Content-Length': '43'
+    });
+    res.end(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
+    
+  } catch (error) {
+    console.error('Error tracking purchase page visit:', error);
+    // Return a 1x1 transparent pixel even on error
+    res.writeHead(200, {
+      'Content-Type': 'image/gif',
+      'Content-Length': '43'
+    });
+    res.end(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
   }
 });
 
@@ -685,28 +708,151 @@ router.post('/:id/track-abandonment', async (req, res) => {
   }
 });
 
-// Test idle trigger manually (for debugging)
-router.post('/:id/test-idle-trigger', auth, async (req, res) => {
+
+
+
+
+// Check queue status
+router.get('/queue-status', auth, async (req, res) => {
   try {
-    const { userEmail, manualEmailIndex = 0 } = req.body;
+    const queueManager = require('../services/queueManager');
+    const stats = await queueManager.getQueueStats();
     
-    if (!userEmail) {
-      return res.status(400).json({ error: 'userEmail is required' });
-    }
-    
-    console.log(`⏰ Manually testing idle trigger for ${userEmail} in campaign ${req.params.id}`);
-    
-    const workerService = require('../services/workerService');
-    await workerService.processIdleTimeTrigger(req.params.id, userEmail, manualEmailIndex);
-    
-    res.json({ 
-      success: true, 
-      message: `Idle trigger processed for ${userEmail}`,
-      userEmail,
-      manualEmailIndex
+    res.json({
+      success: true,
+      queueStats: stats,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error testing idle trigger:', error);
+    console.error('Error getting queue status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Check campaign analytics
+router.get('/:id/analytics', auth, async (req, res) => {
+  try {
+    const campaign = await EmailCampaign.findOne({
+      _id: req.params.id,
+      createdBy: req.user.id
+    });
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    res.json({
+      success: true,
+      analytics: campaign.analytics,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error getting campaign analytics:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test worker processing (for debugging)
+router.post('/test-worker', auth, async (req, res) => {
+  try {
+    const { testType = 'idle' } = req.body;
+    
+    console.log(`🧪 Testing ${testType} worker processing...`);
+    
+    const queueManager = require('../services/queueManager');
+    
+    if (testType === 'idle') {
+      // Test idle worker with immediate execution - use a real active campaign ID
+      const campaign = await EmailCampaign.findOne({ status: 'active' });
+      if (!campaign) {
+        return res.status(400).json({ error: 'No active campaigns found for testing' });
+      }
+      
+      if (!campaign.recipients || campaign.recipients.length === 0) {
+        return res.status(400).json({ error: 'No recipients found in campaign for testing' });
+      }
+      
+      const testRecipient = campaign.recipients[0].email;
+      const job = await queueManager.scheduleIdleTimeTrigger(
+        campaign._id.toString(),
+        testRecipient,
+        0,
+        2000 // 2 second delay
+      );
+      
+      console.log(`🧪 Test idle job scheduled: ${job.id}`);
+      
+      // Wait a bit and check queue status
+      setTimeout(async () => {
+        try {
+          const stats = await queueManager.getQueueStats();
+          console.log('📊 Queue stats after test job:', JSON.stringify(stats, null, 2));
+        } catch (error) {
+          console.error('❌ Error getting queue stats:', error);
+        }
+      }, 3000);
+      
+    } else if (testType === 'timeDelay') {
+      // Test time delay worker with immediate execution - use a real active campaign ID
+      const campaign = await EmailCampaign.findOne({ status: 'active' });
+      if (!campaign) {
+        return res.status(400).json({ error: 'No active campaigns found for testing' });
+      }
+      
+      if (!campaign.recipients || campaign.recipients.length === 0) {
+        return res.status(400).json({ error: 'No recipients found in campaign for testing' });
+      }
+      
+      const testRecipient = campaign.recipients[0].email;
+      const job = await queueManager.scheduleTimeDelayTrigger(
+        campaign._id.toString(),
+        testRecipient,
+        0,
+        2000 // 2 second delay
+      );
+      
+      console.log(`🧪 Test time delay job scheduled: ${job.id}`);
+      
+      // Wait a bit and check queue status
+      setTimeout(async () => {
+        try {
+          const stats = await queueManager.getQueueStats();
+          console.log('📊 Queue stats after time delay test job:', JSON.stringify(stats, null, 2));
+        } catch (error) {
+          console.error('❌ Error getting queue stats:', error);
+        }
+      }, 3000);
+    }
+    
+    res.json({
+      success: true,
+      message: `${testType} worker test job scheduled with 2 second delay`,
+      testType,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error testing worker:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test worker status
+router.get('/worker-status', auth, async (req, res) => {
+  try {
+    const queueManager = require('../services/queueManager');
+    const stats = await queueManager.getQueueStats();
+    
+    // Check if workers are running
+    const { redis } = require('../config/redis');
+    
+    res.json({
+      success: true,
+      redisStatus: redis.status,
+      queueStats: stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error getting worker status:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -899,10 +1045,6 @@ router.post('/:id/send-purchase-campaign', auth, async (req, res) => {
           purchaseLinkText: campaign.purchaseLinkText
         });
 
-        // Schedule behavior triggers for this purchase email
-        const emailCampaignEngine = require('../services/emailCampaignEngine');
-        await emailCampaignEngine.scheduleTriggersForManualEmail(campaign._id.toString(), recipient.email);
-
         sentCount++;
         console.log(`✅ Purchase email sent to ${recipient.email}`);
 
@@ -912,17 +1054,67 @@ router.post('/:id/send-purchase-campaign', auth, async (req, res) => {
       }
     }
 
-    // Save campaign with updated recipient data
+    // Save campaign with updated recipient data BEFORE scheduling triggers
+    console.log(`💾 Saving campaign with updated recipient data...`);
     await campaign.save();
+    console.log(`✅ Campaign saved successfully`);
+
+    // Now schedule triggers for all successfully sent emails
+    console.log(`⏰ Scheduling triggers for all sent emails...`);
+    for (const recipient of targetRecipients) {
+      try {
+        if (recipient.manualEmails && recipient.manualEmails.length > 0) {
+          const manualEmailIndex = recipient.manualEmails.length - 1;
+          const emailCampaignEngine = require('../services/emailCampaignEngine');
+          await emailCampaignEngine.scheduleTriggersForManualEmail(campaign._id.toString(), recipient.email, manualEmailIndex);
+          
+          console.log(`⏰ Scheduled triggers for purchase email to ${recipient.email} (manual email index: ${manualEmailIndex})`);
+          
+          // Log idle trigger status
+          const idleTriggers = campaign.behaviorTriggers.filter(t => 
+            t.behavior === 'idle' && t.enabled && t.idleTime?.enabled
+          );
+          if (idleTriggers.length > 0) {
+            const idleTrigger = idleTriggers[0];
+            console.log(`⏰ Idle trigger configured: ${idleTrigger.idleTime.minutes} minutes for ${recipient.email}`);
+            console.log(`⏰ If user doesn't open/click within ${idleTrigger.idleTime.minutes} minutes, idle reminder will be sent`);
+          } else {
+            console.log(`⚠️ No idle trigger configured for ${recipient.email} - no idle reminders will be sent`);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Failed to schedule triggers for ${recipient.email}:`, error);
+      }
+    }
 
     console.log(`📧 Purchase campaign completed. Sent: ${sentCount}, Failed: ${failedEmails.length}`);
+    
+    // Summary of triggers scheduled
+    const idleTriggers = campaign.behaviorTriggers.filter(t => 
+      t.behavior === 'idle' && t.enabled && t.idleTime?.enabled
+    );
+    const timeDelayTriggers = campaign.timeDelayTrigger?.enabled;
+    
+    console.log(`⏰ Trigger Summary:`);
+    console.log(`   📧 Purchase emails sent: ${sentCount}`);
+    console.log(`   ⏰ Idle triggers configured: ${idleTriggers.length > 0 ? 'Yes' : 'No'}`);
+    if (idleTriggers.length > 0) {
+      console.log(`   ⏰ Idle time: ${idleTriggers[0].idleTime.minutes} minutes`);
+    }
+    console.log(`   ⏰ Time delay triggers: ${timeDelayTriggers ? 'Yes' : 'No'}`);
+    console.log(`   🎯 Next: Users will receive idle reminders if they don't open/click within the configured time`);
 
     res.json({
       success: true,
       message: `Purchase campaign sent to ${sentCount} recipients`,
       sentCount,
       failedEmails,
-      totalRecipients: targetRecipients.length
+      totalRecipients: targetRecipients.length,
+      triggersScheduled: {
+        idleTriggers: idleTriggers.length,
+        timeDelayTriggers: timeDelayTriggers ? 1 : 0,
+        idleTimeMinutes: idleTriggers.length > 0 ? idleTriggers[0].idleTime.minutes : null
+      }
     });
 
   } catch (error) {
@@ -1202,6 +1394,10 @@ router.get('/purchase/:campaignId/:userEmail', async (req, res) => {
             Please try again or contact support.
           </div>
         </div>
+
+        <!-- Tracking pixel for purchase page visit (for idle tracking) -->
+        <img src="${process.env.BASE_URL || 'http://localhost:5000'}/api/campaigns/track/purchase-page-visit/${campaignId}/${encodeURIComponent(decodedEmail)}" 
+             width="1" height="1" style="display:none;" alt="" />
 
         <script>
           let pageLoadTime = Date.now();
