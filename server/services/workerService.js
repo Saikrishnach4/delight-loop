@@ -305,26 +305,45 @@ class WorkerService {
       // Update recipient's last activity
       recipient.lastActivity = new Date();
 
-      // Mark the behavior as occurred
+      // Mark the behavior as occurred (only if not already marked)
       if (behavior === 'open') {
-        latestManualEmail.opened = true;
-        latestManualEmail.openedAt = new Date();
-        campaign.analytics.totalOpens += 1;
+        if (!latestManualEmail.opened) {
+          latestManualEmail.opened = true;
+          latestManualEmail.openedAt = new Date();
+          campaign.analytics.totalOpens += 1;
+          console.log(`📧 First time marking email as opened for ${userEmail}`);
+        } else {
+          console.log(`⏭️ Email already marked as opened for ${userEmail}, skipping duplicate`);
+        }
       } else if (behavior === 'click') {
-        latestManualEmail.clicked = true;
-        latestManualEmail.clickedAt = new Date();
-        campaign.analytics.totalClicks += 1;
+        if (!latestManualEmail.clicked) {
+          latestManualEmail.clicked = true;
+          latestManualEmail.clickedAt = new Date();
+          campaign.analytics.totalClicks += 1;
+          console.log(`📧 First time marking email as clicked for ${userEmail}`);
+        } else {
+          console.log(`⏭️ Email already marked as clicked for ${userEmail}, skipping duplicate`);
+        }
       } else if (behavior === 'purchase') {
-        latestManualEmail.purchased = true;
-        latestManualEmail.purchasedAt = new Date();
-        // Note: Purchase amount and currency are handled in the main emailCampaignEngine
-        // This worker version doesn't have access to additional data
-        campaign.analytics.totalPurchases += 1;
-        campaign.analytics.totalRevenue += (latestManualEmail.purchaseAmount || 0);
+        if (!latestManualEmail.purchased) {
+          latestManualEmail.purchased = true;
+          latestManualEmail.purchasedAt = new Date();
+          // Note: Purchase amount and currency are handled in the main emailCampaignEngine
+          // This worker version doesn't have access to additional data
+          campaign.analytics.totalPurchases += 1;
+          campaign.analytics.totalRevenue += (latestManualEmail.purchaseAmount || 0);
+          console.log(`📧 First time marking email as purchased for ${userEmail}`);
+        } else {
+          console.log(`⏭️ Email already marked as purchased for ${userEmail}, skipping duplicate`);
+        }
       } else if (behavior === 'purchasePageVisit') {
-        latestManualEmail.purchasePageVisited = true;
-        latestManualEmail.purchasePageVisitedAt = new Date();
-        console.log(`📧 Marked latest email as purchase page visited for ${userEmail}`);
+        if (!latestManualEmail.purchasePageVisited) {
+          latestManualEmail.purchasePageVisited = true;
+          latestManualEmail.purchasePageVisitedAt = new Date();
+          console.log(`📧 First time marking email as purchase page visited for ${userEmail}`);
+        } else {
+          console.log(`⏭️ Email already marked as purchase page visited for ${userEmail}, skipping duplicate`);
+        }
       }
 
       // Check for behavior triggers

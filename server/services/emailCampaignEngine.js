@@ -143,31 +143,47 @@ class EmailCampaignEngine {
         const latestEmail = recipient.manualEmails[recipient.manualEmails.length - 1];
         
         if (behavior === 'open') {
-          latestEmail.opened = true;
-          console.log(`📧 Marked latest email as opened for ${userEmail}`);
-          
-          // Update campaign analytics
-          campaign.analytics.totalOpens = (campaign.analytics.totalOpens || 0) + 1;
+          if (!latestEmail.opened) {
+            latestEmail.opened = true;
+            console.log(`📧 First time marking email as opened for ${userEmail}`);
+            
+            // Update campaign analytics
+            campaign.analytics.totalOpens = (campaign.analytics.totalOpens || 0) + 1;
+          } else {
+            console.log(`⏭️ Email already marked as opened for ${userEmail}, skipping duplicate`);
+          }
         } else if (behavior === 'click') {
-          latestEmail.clicked = true;
-          console.log(`📧 Marked latest email as clicked for ${userEmail}`);
-          
-          // Update campaign analytics
-          campaign.analytics.totalClicks = (campaign.analytics.totalClicks || 0) + 1;
+          if (!latestEmail.clicked) {
+            latestEmail.clicked = true;
+            console.log(`📧 First time marking email as clicked for ${userEmail}`);
+            
+            // Update campaign analytics
+            campaign.analytics.totalClicks = (campaign.analytics.totalClicks || 0) + 1;
+          } else {
+            console.log(`⏭️ Email already marked as clicked for ${userEmail}, skipping duplicate`);
+          }
         } else if (behavior === 'purchase') {
-          latestEmail.purchased = true;
-          latestEmail.purchasedAt = new Date();
-          latestEmail.purchaseAmount = additionalData.purchaseAmount || 99.99;
-          latestEmail.purchaseCurrency = additionalData.purchaseCurrency || 'USD';
-          console.log(`📧 Marked latest email as purchased for ${userEmail}`);
-          
-          // Update campaign analytics
-          campaign.analytics.totalPurchases = (campaign.analytics.totalPurchases || 0) + 1;
-          campaign.analytics.totalRevenue = (campaign.analytics.totalRevenue || 0) + (additionalData.purchaseAmount || 99.99);
+          if (!latestEmail.purchased) {
+            latestEmail.purchased = true;
+            latestEmail.purchasedAt = new Date();
+            latestEmail.purchaseAmount = additionalData.purchaseAmount || 99.99;
+            latestEmail.purchaseCurrency = additionalData.purchaseCurrency || 'USD';
+            console.log(`📧 First time marking email as purchased for ${userEmail}`);
+            
+            // Update campaign analytics
+            campaign.analytics.totalPurchases = (campaign.analytics.totalPurchases || 0) + 1;
+            campaign.analytics.totalRevenue = (campaign.analytics.totalRevenue || 0) + (additionalData.purchaseAmount || 99.99);
+          } else {
+            console.log(`⏭️ Email already marked as purchased for ${userEmail}, skipping duplicate`);
+          }
         } else if (behavior === 'purchasePageVisit') {
-          latestEmail.purchasePageVisited = true;
-          latestEmail.purchasePageVisitedAt = new Date();
-          console.log(`📧 Marked latest email as purchase page visited for ${userEmail}`);
+          if (!latestEmail.purchasePageVisited) {
+            latestEmail.purchasePageVisited = true;
+            latestEmail.purchasePageVisitedAt = new Date();
+            console.log(`📧 First time marking email as purchase page visited for ${userEmail}`);
+          } else {
+            console.log(`⏭️ Email already marked as purchase page visited for ${userEmail}, skipping duplicate`);
+          }
         }
       }
 
