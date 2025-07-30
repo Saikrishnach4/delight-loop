@@ -65,7 +65,11 @@ class WorkerService {
       console.log(`📧 Follow-up email body length: ${campaign.timeDelayTrigger.followUpEmail.body?.length || 0} characters`);
       
       // Send time delay follow-up email
-      await this.sendSingleEmail(campaign, recipientEmail, campaign.timeDelayTrigger.followUpEmail);
+      await this.sendSingleEmail(campaign, recipientEmail, {
+        subject: campaign.timeDelayTrigger.followUpEmail.subject,
+        body: campaign.timeDelayTrigger.followUpEmail.body,
+        senderName: campaign.emailTemplate?.senderName || 'Delight Loop'
+      });
       
       // Mark time delay email as sent
       manualEmail.timeDelayEmailSent = true;
@@ -223,7 +227,11 @@ class WorkerService {
       console.log(`📧 Subject: ${idleTrigger.followUpEmail.subject}`);
       
       // Send idle reminder email
-      await this.sendSingleEmail(campaign, recipientEmail, idleTrigger.followUpEmail);
+      await this.sendSingleEmail(campaign, recipientEmail, {
+        subject: idleTrigger.followUpEmail.subject,
+        body: idleTrigger.followUpEmail.body,
+        senderName: campaign.emailTemplate?.senderName || 'Delight Loop'
+      });
       
       // Mark idle email as sent
       manualEmail.idleEmailSent = true;
@@ -337,7 +345,11 @@ class WorkerService {
         }
 
         // Send follow-up email
-        await this.sendSingleEmail(campaign, userEmail, trigger.followUpEmail);
+        await this.sendSingleEmail(campaign, userEmail, {
+          subject: trigger.followUpEmail.subject,
+          body: trigger.followUpEmail.body,
+          senderName: campaign.emailTemplate?.senderName || 'Delight Loop'
+        });
         
         // Mark follow-up as sent
         if (behavior === 'open') {

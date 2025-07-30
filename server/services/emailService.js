@@ -117,13 +117,37 @@ class EmailService {
       console.log('🔍 ADDING TRACKING TO EMAIL:');
       console.log(`📧 Campaign ID: ${campaignId}`);
       console.log(`📧 User Email: ${userEmail}`);
+      console.log(`📧 Email Content Type: ${typeof emailContent}`);
+      console.log(`📧 Email Content Preview: ${typeof emailContent === 'string' ? emailContent.substring(0, 100) : JSON.stringify(emailContent).substring(0, 100)}`);
       console.log(`📧 BASE_URL from env: ${process.env.BASE_URL || 'NOT SET'}`);
       console.log(`📧 Using tracking base URL: ${trackingBaseUrl}`);
       console.log(`📧 Tracking URL: ${trackingPixelUrl}`);
       console.log(`📧 Click Tracking URL: ${clickTrackingUrl}`);
       console.log(`📧 Purchase URL: ${purchaseUrl}`);
       
-      let htmlContent = emailContent;
+      // Ensure emailContent is a string
+      let htmlContent = '';
+      if (typeof emailContent === 'string') {
+        htmlContent = emailContent;
+      } else if (emailContent && typeof emailContent === 'object') {
+        // If emailContent is an object, try to extract the body
+        htmlContent = emailContent.body || emailContent.html || emailContent.content || '';
+        console.log('📧 Extracted email content from object:', { 
+          hasBody: !!emailContent.body, 
+          hasHtml: !!emailContent.html, 
+          hasContent: !!emailContent.content,
+          extractedContent: htmlContent.substring(0, 100) + '...'
+        });
+      } else {
+        console.error('❌ Invalid emailContent type:', typeof emailContent, emailContent);
+        throw new Error('Invalid email content provided');
+      }
+      
+      // Ensure htmlContent is a string
+      if (typeof htmlContent !== 'string') {
+        console.error('❌ htmlContent is not a string:', typeof htmlContent, htmlContent);
+        throw new Error('Email content must be a string');
+      }
       
       // Add tracking pixel at the end of the email
       const trackingPixel = `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`;
@@ -136,6 +160,9 @@ class EmailService {
         htmlContent = htmlContent.replace('</body>', `${trackingPixel}</body>`);
         console.log('📧 Added tracking pixel before </body> tag');
       }
+      
+      console.log(`📧 Final HTML content length: ${htmlContent.length}`);
+      console.log(`📧 HTML content preview: ${htmlContent.substring(0, 200)}...`);
       
       // Enhanced click tracking: Replace ALL URLs with recipient-specific tracking
       // This includes both <a href> tags and plain text URLs
@@ -264,7 +291,15 @@ class EmailService {
       return htmlContent;
     } catch (error) {
       console.error('❌ Error adding tracking to email:', error);
-      return emailContent; // Return original content if tracking fails
+      console.error('❌ Error stack:', error.stack);
+      // Return original content if tracking fails, but ensure it's a string
+      if (typeof emailContent === 'string') {
+        return emailContent;
+      } else if (emailContent && typeof emailContent === 'object') {
+        return emailContent.body || emailContent.html || emailContent.content || '';
+      } else {
+        return '';
+      }
     }
   }
 

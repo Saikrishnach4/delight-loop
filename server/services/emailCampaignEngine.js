@@ -93,19 +93,24 @@ class EmailCampaignEngine {
     try {
       console.log(`📧 Sending single email to ${recipientEmail}`);
       
+      // Extract email template body
+      const emailBody = emailTemplate.body || emailTemplate.html || emailTemplate.content || '';
+      console.log(`📧 Email template body length: ${emailBody.length}`);
+      
       // Add tracking to email
       const emailWithTracking = await emailService.addTrackingToEmail(
-        emailTemplate,
+        emailBody,
         campaign._id.toString(),
         recipientEmail,
+        null, // baseUrl
         campaign
       );
       
       // Send email
       await emailService.sendEmail({
         to: recipientEmail,
-        subject: emailWithTracking.subject,
-        body: emailWithTracking.body
+        subject: emailTemplate.subject || 'Email from Delight Loop',
+        body: emailWithTracking
       });
       
       // Update campaign analytics for follow-up emails
@@ -208,7 +213,11 @@ class EmailCampaignEngine {
       console.log(`✅ Found ${behavior} trigger with follow-up email:`, trigger);
       
       // Send follow-up email
-      await this.sendSingleEmail(campaign, userEmail, trigger.followUpEmail);
+      await this.sendSingleEmail(campaign, userEmail, {
+        subject: trigger.followUpEmail.subject,
+        body: trigger.followUpEmail.body,
+        senderName: campaign.emailTemplate?.senderName || 'Delight Loop'
+      });
       
       // Mark follow-up as sent
       const recipient = campaign.recipients.find(r => r.email === userEmail);
