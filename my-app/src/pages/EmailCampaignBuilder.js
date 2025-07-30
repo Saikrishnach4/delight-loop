@@ -38,6 +38,7 @@ import {
   People as PeopleIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import apiClient from '../services/axiosConfig';
 
 const EmailCampaignBuilder = () => {
   const { id } = useParams();
@@ -96,18 +97,8 @@ const EmailCampaignBuilder = () => {
   const fetchCampaign = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/campaigns/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch campaign');
-      }
-
-      const data = await response.json();
-      setCampaign(data);
+      const response = await apiClient.get(`/api/campaigns/${id}`);
+      setCampaign(response.data);
     } catch (error) {
       setError(error.message);
     } finally {
@@ -130,20 +121,11 @@ const EmailCampaignBuilder = () => {
         purchaseAmount: campaign.purchaseAmount
       });
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(campaign)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save campaign');
-      }
-
-      const savedCampaign = await response.json();
+      const response = id === 'new' 
+        ? await apiClient.post('/api/campaigns', campaign)
+        : await apiClient.put(`/api/campaigns/${id}`, campaign);
+      
+      const savedCampaign = response.data;
       
       if (id === 'new') {
         navigate(`/campaigns/${savedCampaign._id}`);
@@ -162,19 +144,7 @@ const EmailCampaignBuilder = () => {
 
   const handleStatusChange = async (newStatus) => {
     try {
-      const response = await fetch(`/api/campaigns/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update campaign status');
-      }
-
+      await apiClient.put(`/api/campaigns/${id}`, { status: newStatus });
       setCampaign({ ...campaign, status: newStatus });
     } catch (error) {
       setError(error.message);
@@ -187,21 +157,8 @@ const EmailCampaignBuilder = () => {
     if (!newRecipient.email.trim()) return;
 
     try {
-      const response = await fetch(`/api/campaigns/${id}/recipients`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(newRecipient)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add recipient');
-      }
-
-      const updatedCampaign = await response.json();
-      setCampaign(updatedCampaign);
+      const response = await apiClient.post(`/api/campaigns/${id}/recipients`, newRecipient);
+      setCampaign(response.data);
       setNewRecipient({ email: '', name: '' });
     } catch (error) {
       setError(error.message);
@@ -210,19 +167,8 @@ const EmailCampaignBuilder = () => {
 
   const handleRemoveRecipient = async (email) => {
     try {
-      const response = await fetch(`/api/campaigns/${id}/recipients/${encodeURIComponent(email)}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to remove recipient');
-      }
-
-      const updatedCampaign = await response.json();
-      setCampaign(updatedCampaign);
+      const response = await apiClient.delete(`/api/campaigns/${id}/recipients/${encodeURIComponent(email)}`);
+      setCampaign(response.data);
     } catch (error) {
       setError(error.message);
     }
@@ -292,19 +238,8 @@ const EmailCampaignBuilder = () => {
       }
 
       // Send purchase campaign
-      const response = await fetch(`/api/campaigns/${id}/send-purchase-campaign`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to send purchase campaign');
-      }
+      const response = await apiClient.post(`/api/campaigns/${id}/send-purchase-campaign`);
+      const result = response.data;
 
       let message = `✅ Purchase campaign sent successfully!\n\nSent to: ${result.sentCount} recipients\nFailed: ${result.failedEmails.length} recipients\n\n${result.message}`;
       
@@ -1081,12 +1016,8 @@ const EmailCampaignBuilder = () => {
                           sx={{ mt: 1 }}
                           onClick={async () => {
                             try {
-                              const response = await fetch(`/api/campaigns/${id}/purchase-settings`, {
-                                headers: {
-                                  'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                }
-                              });
-                              const result = await response.json();
+                              const response = await apiClient.get(`/api/campaigns/${id}/purchase-settings`);
+                              const result = response.data;
                               console.log('🔍 Purchase Settings Debug:', result);
                               alert(`Purchase Settings:\n${JSON.stringify(result.purchaseSettings, null, 2)}`);
                             } catch (error) {

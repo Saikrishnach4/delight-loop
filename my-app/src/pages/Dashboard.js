@@ -28,6 +28,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
+import apiClient from '../services/axiosConfig';
 
 const Dashboard = () => {
   const [dashboards, setDashboards] = useState([]);
@@ -68,19 +69,8 @@ const Dashboard = () => {
   const fetchDashboards = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/dashboards', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setDashboards(data.dashboards || []);
-      } else {
-        console.error('Failed to fetch dashboards');
-        toast.error('Failed to load dashboards');
-      }
+      const response = await apiClient.get('/api/dashboards');
+      setDashboards(response.data.dashboards || []);
     } catch (error) {
       console.error('Error fetching dashboards:', error);
       toast.error('Error loading dashboards');
@@ -128,25 +118,11 @@ const Dashboard = () => {
         theme: defaultTheme
       };
 
-      const response = await fetch('/api/dashboards', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(dashboardData)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setDashboards(prev => [...prev, data.dashboard]);
-        setNewDashboard({ name: '', description: '' });
-        setOpenDialog(false);
-        toast.success('Dashboard created successfully!');
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.error || 'Failed to create dashboard');
-      }
+      const response = await apiClient.post('/api/dashboards', dashboardData);
+      setDashboards(prev => [...prev, response.data.dashboard]);
+      setNewDashboard({ name: '', description: '' });
+      setOpenDialog(false);
+      toast.success('Dashboard created successfully!');
     } catch (error) {
       console.error('Error creating dashboard:', error);
       toast.error('Error creating dashboard');
@@ -159,20 +135,9 @@ const Dashboard = () => {
     }
 
     try {
-      const response = await fetch(`/api/dashboards/${dashboardId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        setDashboards(prev => prev.filter(d => d._id !== dashboardId));
-        toast.success('Dashboard deleted successfully!');
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.error || 'Failed to delete dashboard');
-      }
+      await apiClient.delete(`/api/dashboards/${dashboardId}`);
+      setDashboards(prev => prev.filter(d => d._id !== dashboardId));
+      toast.success('Dashboard deleted successfully!');
     } catch (error) {
       console.error('Error deleting dashboard:', error);
       toast.error('Error deleting dashboard');

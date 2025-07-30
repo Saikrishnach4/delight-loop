@@ -21,7 +21,7 @@ import {
   Search as SearchIcon,
   DragIndicator as DragIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
+import apiClient from '../services/axiosConfig';
 
 const WidgetSelector = ({ open, onClose, onSelectWidget }) => {
   const [widgetTypes, setWidgetTypes] = useState([]);
@@ -35,7 +35,7 @@ const WidgetSelector = ({ open, onClose, onSelectWidget }) => {
 
   const fetchWidgetTypes = async () => {
     try {
-      const response = await axios.get('/api/widgets/types');
+      const response = await apiClient.get('/api/widgets/types');
       setWidgetTypes(response.data.widgetTypes);
     } catch (error) {
       console.error('Error fetching widget types:', error);

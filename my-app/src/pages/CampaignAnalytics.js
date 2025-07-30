@@ -26,6 +26,7 @@ import {
 import {
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
+import apiClient from '../services/axiosConfig';
 
 const CampaignAnalytics = () => {
   const { campaignId } = useParams();
@@ -42,17 +43,8 @@ const CampaignAnalytics = () => {
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/campaigns/${campaignId}/analytics`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch analytics');
-      }
-
-      const data = await response.json();
+      const response = await apiClient.get(`/api/campaigns/${campaignId}/analytics`);
+      const data = response.data;
       console.log('📊 Analytics data received:', data);
       console.log('📊 Campaign data:', data.campaign);
       console.log('📊 Recipients data:', data.recipients);
@@ -142,20 +134,13 @@ const CampaignAnalytics = () => {
             onClick={async () => {
               if (analytics?.recipients?.[0]?.email) {
                 try {
-                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({
-                      recipientEmail: analytics.recipients[0].email,
-                      action: 'purchase',
-                      purchaseAmount: 99.99,
-                      purchaseCurrency: 'USD'
-                    })
+                  const response = await apiClient.post(`/api/campaigns/${campaignId}/test-interactions`, {
+                    recipientEmail: analytics.recipients[0].email,
+                    action: 'purchase',
+                    purchaseAmount: 99.99,
+                    purchaseCurrency: 'USD'
                   });
-                  const result = await response.json();
+                  const result = response.data;
                   console.log('🧪 Test purchase result:', result);
                   if (result.success) {
                     fetchAnalytics(); // Refresh analytics
@@ -185,18 +170,11 @@ const CampaignAnalytics = () => {
             onClick={async () => {
               if (analytics?.recipients?.[0]?.email) {
                 try {
-                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({
-                      recipientEmail: analytics.recipients[0].email,
-                      action: 'open'
-                    })
+                  const response = await apiClient.post(`/api/campaigns/${campaignId}/test-interactions`, {
+                    recipientEmail: analytics.recipients[0].email,
+                    action: 'open'
                   });
-                  const result = await response.json();
+                  const result = response.data;
                   console.log('🧪 Test open result:', result);
                   if (result.success) {
                     fetchAnalytics(); // Refresh analytics
@@ -216,18 +194,11 @@ const CampaignAnalytics = () => {
             onClick={async () => {
               if (analytics?.recipients?.[0]?.email) {
                 try {
-                  const response = await fetch(`/api/campaigns/${campaignId}/test-interactions`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({
-                      recipientEmail: analytics.recipients[0].email,
-                      action: 'click'
-                    })
+                  const response = await apiClient.post(`/api/campaigns/${campaignId}/test-interactions`, {
+                    recipientEmail: analytics.recipients[0].email,
+                    action: 'click'
                   });
-                  const result = await response.json();
+                  const result = response.data;
                   console.log('🧪 Test click result:', result);
                   if (result.success) {
                     fetchAnalytics(); // Refresh analytics

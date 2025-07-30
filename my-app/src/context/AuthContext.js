@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from '../services/axiosConfig';
 import toast from 'react-hot-toast';
 
 const AuthContext = createContext();
@@ -52,21 +52,14 @@ const authReducer = (state, action) => {
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Set up axios defaults
-  useEffect(() => {
-    if (state.token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
-    } else {
-      delete axios.defaults.headers.common['Authorization'];
-    }
-  }, [state.token]);
+  // Note: Authorization headers are now handled by apiClient interceptors
 
   // Check if user is authenticated on app load
   useEffect(() => {
     const checkAuth = async () => {
       if (state.token) {
         try {
-          const response = await axios.get('/api/auth/profile');
+          const response = await apiClient.get('/api/auth/profile');
           dispatch({
             type: 'LOGIN_SUCCESS',
             payload: { user: response.data.user, token: state.token },
@@ -86,7 +79,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     dispatch({ type: 'LOGIN_START' });
     try {
-      const response = await axios.post('/api/auth/login', { email, password });
+      const response = await apiClient.post('/api/auth/login', { email, password });
       const { user, token } = response.data;
       
       localStorage.setItem('token', token);
@@ -108,7 +101,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password) => {
     dispatch({ type: 'LOGIN_START' });
     try {
-      const response = await axios.post('/api/auth/register', {
+      const response = await apiClient.post('/api/auth/register', {
         username,
         email,
         password,
@@ -139,7 +132,7 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (updates) => {
     try {
-      const response = await axios.put('/api/auth/profile', updates);
+      const response = await apiClient.put('/api/auth/profile', updates);
       dispatch({
         type: 'UPDATE_USER',
         payload: response.data.user,
@@ -155,7 +148,7 @@ export const AuthProvider = ({ children }) => {
 
   const changePassword = async (currentPassword, newPassword) => {
     try {
-      await axios.put('/api/auth/change-password', {
+      await apiClient.put('/api/auth/change-password', {
         currentPassword,
         newPassword,
       });

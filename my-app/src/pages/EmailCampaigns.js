@@ -38,6 +38,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import apiClient from '../services/axiosConfig';
 
 const EmailCampaigns = () => {
   const [campaigns, setCampaigns] = useState([]);
@@ -72,18 +73,8 @@ const EmailCampaigns = () => {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/campaigns', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch campaigns');
-      }
-
-      const data = await response.json();
-      setCampaigns(data);
+      const response = await apiClient.get('/api/campaigns');
+      setCampaigns(response.data);
     } catch (error) {
       setError(error.message);
     } finally {
@@ -93,11 +84,7 @@ const EmailCampaigns = () => {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch('/api/campaigns/templates/list', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await apiClient.get('/api/campaigns/templates/list');
 
       if (response.ok) {
         const data = await response.json();
@@ -110,20 +97,8 @@ const EmailCampaigns = () => {
 
   const handleCreateCampaign = async () => {
     try {
-      const response = await fetch('/api/campaigns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(newCampaign)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create campaign');
-      }
-
-      const campaign = await response.json();
+      const response = await apiClient.post('/api/campaigns', newCampaign);
+      const campaign = response.data;
       setCampaigns([campaign, ...campaigns]);
       setCreateDialogOpen(false);
       setNewCampaign({
@@ -155,20 +130,8 @@ const EmailCampaigns = () => {
         triggers: selectedTemplate.triggers
       };
 
-      const response = await fetch('/api/campaigns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(campaignData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create campaign from template');
-      }
-
-      const campaign = await response.json();
+      const response = await apiClient.post('/api/campaigns', campaignData);
+      const campaign = response.data;
       setCampaigns([campaign, ...campaigns]);
       setTemplateDialogOpen(false);
       setSelectedTemplate(null);
@@ -198,17 +161,7 @@ const EmailCampaigns = () => {
     }
 
     try {
-      const response = await fetch(`/api/campaigns/${selectedCampaign._id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete campaign');
-      }
-
+      await apiClient.delete(`/api/campaigns/${selectedCampaign._id}`);
       setCampaigns(campaigns.filter(c => c._id !== selectedCampaign._id));
       handleMenuClose();
     } catch (error) {
@@ -218,19 +171,7 @@ const EmailCampaigns = () => {
 
   const handleStatusChange = async (campaignId, newStatus) => {
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update campaign status');
-      }
-
+      await apiClient.put(`/api/campaigns/${campaignId}`, { status: newStatus });
       setCampaigns(campaigns.map(c => 
         c._id === campaignId ? { ...c, status: newStatus } : c
       ));

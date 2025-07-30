@@ -22,7 +22,7 @@ import {
   Palette as PaletteIcon,
   Group as GroupIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
+import apiClient from '../services/axiosConfig';
 import toast from 'react-hot-toast';
 import DashboardCanvas from '../components/DashboardCanvas';
 import ThemeCustomizer from '../components/Theming/ThemeCustomizer';
@@ -68,7 +68,7 @@ const DashboardBuilder = () => {
       console.log('Making API call to:', `/api/dashboards/${id}`);
       console.log('Current user token available:', !!localStorage.getItem('token'));
       
-      const response = await axios.get(`/api/dashboards/${id}`);
+      const response = await apiClient.get(`/api/dashboards/${id}`);
       console.log('API response received:', response);
       console.log('Response status:', response.status);
       console.log('Response data:', response.data);
@@ -125,7 +125,7 @@ const DashboardBuilder = () => {
     
     // Auto-save functionality
     try {
-      await axios.put(`/api/dashboards/${id}`, updatedDashboard);
+      await apiClient.put(`/api/dashboards/${id}`, updatedDashboard);
       // Don't show toast for auto-save to avoid spam
     } catch (error) {
       console.error('Auto-save failed:', error);
@@ -152,7 +152,7 @@ const DashboardBuilder = () => {
     // Save to database immediately
     try {
       console.log('Saving theme to database...');
-      await axios.put(`/api/dashboards/${id}`, updatedDashboard);
+      await apiClient.put(`/api/dashboards/${id}`, updatedDashboard);
       console.log('Theme saved to database successfully');
     } catch (error) {
       console.error('Error saving theme to database:', error);
@@ -178,7 +178,7 @@ const DashboardBuilder = () => {
     // Save to database
     try {
       console.log('Saving theme to database...');
-      await axios.put(`/api/dashboards/${id}`, updatedDashboard);
+      await apiClient.put(`/api/dashboards/${id}`, updatedDashboard);
       console.log('Theme saved to database successfully');
       toast.success('Theme saved successfully!');
     } catch (error) {
@@ -193,7 +193,7 @@ const DashboardBuilder = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await axios.put(`/api/dashboards/${id}`, dashboard);
+      await apiClient.put(`/api/dashboards/${id}`, dashboard);
       toast.success('Dashboard saved successfully!');
     } catch (error) {
       console.error('Error saving dashboard:', error);
