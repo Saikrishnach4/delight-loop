@@ -9,7 +9,8 @@
     "client": "cd my-app && npm start",
     "build": "cd my-app && npm run build",
     "install-all": "npm install && cd my-app && npm install",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "test-redis": "node test-redis.js"
   },
   "keywords": ["dashboard", "builder", "collaborative", "email-campaign", "mern"],
   "author": "Your Name",
@@ -26,7 +27,9 @@
     "nodemailer": "^6.9.4",
     "uuid": "^9.0.0",
     "compression": "^1.7.4",
-    "helmet": "^7.0.0"
+    "helmet": "^7.0.0",
+    "bullmq": "^5.0.0",
+    "ioredis": "^5.3.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",

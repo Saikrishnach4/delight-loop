@@ -23,13 +23,7 @@ import {
   Button
 } from '@mui/material';
 import {
-  ArrowBack as ArrowBackIcon,
-  Email as EmailIcon,
-  Schedule as ScheduleIcon,
-  Link as LinkIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
 
 const CampaignAnalytics = () => {
@@ -77,49 +71,7 @@ const CampaignAnalytics = () => {
     return 'Active';
   };
 
-  const getEmailStatusIcon = (manualEmail) => {
-    if (manualEmail.opened || manualEmail.clicked) {
-      return <CheckCircleIcon color="success" fontSize="small" />;
-    } else if (manualEmail.timeDelayEmailSent) {
-      return <ScheduleIcon color="warning" fontSize="small" />;
-    } else if (manualEmail.idleEmailSent) {
-      return <WarningIcon color="error" fontSize="small" />;
-    } else if (manualEmail.hasLinks) {
-      return <LinkIcon color="info" fontSize="small" />;
-    } else {
-      return <EmailIcon color="action" fontSize="small" />;
-    }
-  };
 
-  const getEmailStatusText = (manualEmail) => {
-    const statuses = [];
-    if (manualEmail.opened) statuses.push('Opened');
-    if (manualEmail.clicked) statuses.push('Clicked');
-    if (manualEmail.timeDelayEmailSent) statuses.push('Follow-up Sent');
-    if (manualEmail.idleEmailSent) statuses.push('Idle Reminder Sent');
-    
-    if (statuses.length > 0) {
-      return statuses.join(', ');
-    } else if (manualEmail.hasLinks) {
-      return 'With Links';
-    } else {
-      return 'Sent';
-    }
-  };
-
-  const getEmailStatusColor = (manualEmail) => {
-    if (manualEmail.opened || manualEmail.clicked) {
-      return 'success';
-    } else if (manualEmail.timeDelayEmailSent) {
-      return 'warning';
-    } else if (manualEmail.idleEmailSent) {
-      return 'error';
-    } else if (manualEmail.hasLinks) {
-      return 'info';
-    } else {
-      return 'default';
-    }
-  };
 
   const formatTimeAgo = (date) => {
     if (!date) return 'N/A';
@@ -427,7 +379,6 @@ const CampaignAnalytics = () => {
                   <TableCell>Open Rate</TableCell>
                   <TableCell>Click Rate</TableCell>
                   <TableCell>Last Activity</TableCell>
-                  <TableCell>Email History</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -488,37 +439,6 @@ const CampaignAnalytics = () => {
                           : 'No activity'
                         }
                       </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Box>
-                        {recipient.manualEmails?.map((email, emailIndex) => (
-                          <Box key={emailIndex} display="flex" alignItems="center" mb={1}>
-                            <Tooltip title={getEmailStatusText(email)}>
-                              <IconButton size="small">
-                                {getEmailStatusIcon(email)}
-                              </IconButton>
-                            </Tooltip>
-                            <Typography variant="caption" sx={{ ml: 1 }}>
-                              {formatTimeAgo(email.sentAt)}
-                              {email.hasLinks && (
-                                <LinkIcon fontSize="small" sx={{ ml: 0.5, color: 'info.main' }} />
-                              )}
-                              {email.timeDelayEmailSent && (
-                                <ScheduleIcon fontSize="small" sx={{ ml: 0.5, color: 'warning.main' }} />
-                              )}
-                              {email.idleEmailSent && (
-                                <WarningIcon fontSize="small" sx={{ ml: 0.5, color: 'error.main' }} />
-                              )}
-                              {email.opened && (
-                                <CheckCircleIcon fontSize="small" sx={{ ml: 0.5, color: 'secondary' }} />
-                              )}
-                              {email.clicked && (
-                                <LinkIcon fontSize="small" sx={{ ml: 0.5, color: 'warning.main' }} />
-                              )}
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}

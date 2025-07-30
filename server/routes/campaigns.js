@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth');
 const EmailCampaign = require('../models/EmailCampaign');
 const emailCampaignEngine = require('../services/emailCampaignEngine');
 const emailService = require('../services/emailService');
+const queueManager = require('../services/queueManager');
 
 // Get all campaigns for the authenticated user
 router.get('/', auth, async (req, res) => {
@@ -505,6 +506,28 @@ router.post('/:id/send-to-recipients', auth, async (req, res) => {
   } catch (error) {
     console.error('Error sending manual email to specific recipients:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get queue statistics
+router.get('/queue/stats', auth, async (req, res) => {
+  try {
+    const stats = await queueManager.getQueueStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('Error getting queue stats:', error);
+    res.status(500).json({ error: 'Failed to get queue statistics' });
+  }
+});
+
+// Clean up old jobs
+router.post('/queue/cleanup', auth, async (req, res) => {
+  try {
+    await queueManager.cleanupJobs();
+    res.json({ message: 'Queue cleanup completed' });
+  } catch (error) {
+    console.error('Error cleaning up jobs:', error);
+    res.status(500).json({ error: 'Failed to cleanup jobs' });
   }
 });
 
