@@ -107,8 +107,8 @@ class EmailService {
   // Add tracking to email content
   addTrackingToEmail(emailContent, campaignId, userEmail, baseUrl = null, campaignData = null) {
     try {
-      // Use environment variable or default to localhost
-      const trackingBaseUrl = baseUrl || process.env.BASE_URL || 'http://localhost:5000';
+      // Use environment variable or default to Render domain
+      const trackingBaseUrl = baseUrl || process.env.BASE_URL || 'https://delight-loop.onrender.com';
       const encodedEmail = encodeURIComponent(userEmail);
       const trackingPixelUrl = `${trackingBaseUrl}/api/campaigns/track/open/${campaignId}/${encodedEmail}`;
       const clickTrackingUrl = `${trackingBaseUrl}/api/campaigns/track/click/${campaignId}/${encodedEmail}`;

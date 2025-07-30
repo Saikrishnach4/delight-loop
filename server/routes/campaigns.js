@@ -1004,7 +1004,7 @@ router.post('/:id/send-purchase-campaign', auth, async (req, res) => {
 
     // Send purchase emails to target recipients
     const emailService = require('../services/emailService');
-    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+    const baseUrl = process.env.BASE_URL || 'https://delight-loop.onrender.com';
     
     let sentCount = 0;
     const failedEmails = [];
@@ -1445,7 +1445,7 @@ router.get('/purchase/:campaignId/:userEmail', async (req, res) => {
         </div>
 
         <!-- Tracking pixel for purchase page visit (for idle tracking) -->
-        <img src="${process.env.BASE_URL || 'http://localhost:5000'}/api/campaigns/track/purchase-page-visit/${campaignId}/${encodeURIComponent(decodedEmail)}" 
+        <img src="${process.env.BASE_URL || 'https://delight-loop.onrender.com'}/api/campaigns/track/purchase-page-visit/${campaignId}/${encodeURIComponent(decodedEmail)}" 
              width="1" height="1" style="display:none;" alt="" />
 
         <script>
