@@ -39,8 +39,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/delight-l
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Initialize Redis and queue manager
 const { testConnection: testRedisConnection } = require('./config/redis');
@@ -53,12 +53,12 @@ const emailCampaignEngine = require('./services/emailCampaignEngine');
 const initializeServices = async () => {
   try {
     console.log('🔧 Initializing services...');
-    
+
     // Test Redis connection with retry
     let redisConnected = false;
     let retryCount = 0;
     const maxRetries = 3;
-    
+
     while (!redisConnected && retryCount < maxRetries) {
       try {
         redisConnected = await testRedisConnection();
@@ -77,7 +77,7 @@ const initializeServices = async () => {
         }
       }
     }
-    
+
     if (!redisConnected) {
       console.log('❌ Redis connection failed after multiple attempts');
       console.log('Please check your REDIS_URL in .env file');
@@ -88,23 +88,23 @@ const initializeServices = async () => {
     const emailConnected = await emailService.verifyConnection();
     if (emailConnected) {
       console.log('✅ Email service is ready and connected');
-      
+
       // Start the BullMQ-based trigger system
       emailCampaignEngine.startTimeTriggerChecking();
       console.log('⏰ BullMQ-based trigger system started');
-      
+
       // Clean up old jobs on startup (optional) - don't fail if this doesn't work
       try {
         await queueManager.cleanupJobs();
       } catch (error) {
         console.log('⚠️ Cleanup jobs warning:', error.message);
       }
-      
+
     } else {
       console.log('❌ Email service is not configured properly');
       console.log('Please check your EMAIL_USER and EMAIL_PASS in .env file');
     }
-    
+
     console.log('🎉 Service initialization completed');
   } catch (error) {
     console.error('❌ Service initialization failed:', error.message);
@@ -120,7 +120,9 @@ app.use('/api/dashboards', require('./routes/dashboards'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/widgets', require('./routes/widgets'));
 app.use('/api/collaboration', require('./routes/collaboration'));
-
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
+});
 // Socket.IO for real-time collaboration
 require('./socket/collaboration')(io);
 
