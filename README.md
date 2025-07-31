@@ -509,18 +509,6 @@ The email campaign engine supports multiple behavior-based triggers:
 4. Add tests if applicable
 5. Submit a pull request
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-If you encounter any issues:
-
-1. Check the [Issues](../../issues) page
-2. Review the documentation
-3. Create a new issue with detailed information
-
 ## 🙏 Acknowledgments
 
 - Material-UI for the component library
